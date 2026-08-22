@@ -8,6 +8,13 @@
     "com.unity.ugui": "2.0.0",
     "com.unity.render-pipelines.universal": "17.3.0"
   },
+  "samples": [
+    {
+      "displayName": "Flipbook Basic",
+      "description": "A single scene demonstrating both FlipbookRenderer and FlipbookGraphic with shared animation assets.",
+      "path": "Samples~/01-Flipbook-Basic"
+    }
+  ],
   "keywords": [
     "2d",
     "animation",
@@ -15,6 +22,6 @@
     "ugui"
   ],
   "author": {
-    "name": "KingdomTD"
+    "name": "linagyh"
   }
 }

@@ -70,6 +70,10 @@ void OnEnable()
 }
 ```
 
+## 导入示例
+
+在 Package Manager 中选择 **KingdomTD Flipbook**，展开 **Samples** 后导入 **Flipbook Basic**。打开 `FlipbookBasic.unity` 进入 Play 模式，即可同时查看 `FlipbookRenderer` 和 `FlipbookGraphic`；样例资源独立于本地开发沙盒，可安全复制到业务项目。
+
 ## 注意事项
 
 - 每个 Clip 名称必须唯一，帧范围不能超出 `Columns × Rows`。

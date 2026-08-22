@@ -73,3 +73,6 @@ Package 不依赖 Addressables、Resources 或项目业务程序集，也不提�
 2. 将资产的 `Main Texture` 同时设置到 Material 的 `_MainTex`。
 3. 需要效果纹理时设置 `_EffectTex`，并通过 `SetEffectChangeRate` 控制混合。
 4. 需要角色染色时通过 `SetChangeColor` 和 `SetChangeRate` 设置实例参数。
+## 示例
+
+通过 Package Manager 导入 **Flipbook Basic** 示例。打开其场景即可同时验证 `FlipbookRenderer` 与 `FlipbookGraphic`；两种组件共享同一动画资源，World 渲染额外使用样例材质。

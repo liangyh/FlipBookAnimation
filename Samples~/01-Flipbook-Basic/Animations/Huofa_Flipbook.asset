@@ -1,0 +1,33 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 9666b8808af5642debbfa930024f6e64, type: 3}
+  m_Name: Huofa_Flipbook
+  m_EditorClassIdentifier: KingdomTD.Flipbook::KingdomTD.Flipbook.FlipbookAnimationAsset
+  _mainTexture: {fileID: 2800000, guid: e4081e3ac96c40af9e8b5d4458526762, type: 3}
+  _effectTexture: {fileID: 0}
+  _worldMaterial: {fileID: 2100000, guid: 584a003d18d749dbb364b451c68f0ca1, type: 2}
+  _columns: 10
+  _rows: 10
+  _defaultAnimationName: Idle
+  _clips:
+  - AnimationName: Idle
+    StartFrame: 0
+    FrameCount: 28
+    FrameRate: 30
+    Speed: 1
+    Events: []
+  - AnimationName: Run
+    StartFrame: 28
+    FrameCount: 29
+    FrameRate: 30
+    Speed: 1
+    Events: []
+  - AnimationName: Skill01
+    StartFrame: 57
+    FrameCount: 30
+    FrameRate: 30
+    Speed: 1
+    Events: []
