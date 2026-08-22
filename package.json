@@ -1,0 +1,20 @@
+{
+  "name": "com.kingdomtd.flipbook",
+  "version": "1.0.0",
+  "displayName": "KingdomTD Flipbook",
+  "description": "Reusable grid-texture flipbook animation for world rendering and Unity UI.",
+  "unity": "6000.0",
+  "dependencies": {
+    "com.unity.ugui": "2.0.0",
+    "com.unity.render-pipelines.universal": "17.3.0"
+  },
+  "keywords": [
+    "2d",
+    "animation",
+    "flipbook",
+    "ugui"
+  ],
+  "author": {
+    "name": "KingdomTD"
+  }
+}

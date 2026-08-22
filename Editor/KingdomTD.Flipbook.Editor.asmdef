@@ -1,0 +1,20 @@
+{
+  "name": "KingdomTD.Flipbook.Editor",
+  "rootNamespace": "KingdomTD.Flipbook.Editor",
+  "references": [
+    "KingdomTD.Flipbook",
+    "UnityEngine.UI",
+    "UnityEditor.UI"
+  ],
+  "includePlatforms": [
+    "Editor"
+  ],
+  "excludePlatforms": [],
+  "allowUnsafeCode": false,
+  "overrideReferences": false,
+  "precompiledReferences": [],
+  "autoReferenced": true,
+  "defineConstraints": [],
+  "versionDefines": [],
+  "noEngineReferences": false
+}
