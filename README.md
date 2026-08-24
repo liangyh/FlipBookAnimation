@@ -12,10 +12,35 @@
 
 ## 安装
 
-在目标 Unity 项目中打开 **Window > Package Manager**，点击左上角 **+**：
+### 通过 Git 标签安装（推荐）
 
-1. 本地开发选择 **Add package from disk...**，选中本仓库的 `package.json`；或通过 **Add package from git URL...** 填入此包的 Git 地址。
-2. 安装完成后，确认 Package Manager 中出现 **KingdomTD Flipbook**。
+在目标 Unity 项目中打开 **Window > Package Manager**，点击左上角 **+**，选择 **Add package from git URL...**，填入：
+
+```text
+https://github.com/liangyh/FlipBookAnimation.git#v1.0.1
+```
+
+也可以直接编辑项目的 `Packages/manifest.json`：
+
+```json
+{
+  "dependencies": {
+    "com.kingdomtd.flipbook": "https://github.com/liangyh/FlipBookAnimation.git#v1.0.1"
+  }
+}
+```
+
+安装后，确认 Package Manager 中出现 **KingdomTD Flipbook**。发布新版本后，将 URL 末尾的标签改为对应的 `#vX.Y.Z`（例如 `#v1.0.2`）即可升级；Git 依赖不会自动发现新标签。
+
+### 本地开发
+
+开发此包时，可选择 **Add package from disk...** 并选中本仓库的 `package.json`。本仓库配套的开发工程使用：
+
+```json
+"com.kingdomtd.flipbook": "file:../../FlipBookAnimation"
+```
+
+该本地路径仅用于包开发与联调；业务项目应使用上方固定到 Git 标签的地址，以确保团队成员获得相同版本。
 
 ## 创建动画资源
 
