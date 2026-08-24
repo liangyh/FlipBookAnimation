@@ -1,6 +1,11 @@
 {
   "name": "com.kingdomtd.flipbook",
   "version": "1.0.1",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/liangyh/FlipBookAnimation.git"
+  },
   "displayName": "KingdomTD Flipbook",
   "description": "Reusable grid-texture flipbook animation for world rendering and Unity UI.",
   "unity": "6000.0",
