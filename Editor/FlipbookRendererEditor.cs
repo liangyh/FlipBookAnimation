@@ -15,6 +15,8 @@ namespace KingdomTD.Flipbook.Editor
         private SerializedProperty _loop;
         private SerializedProperty _randomizeLoopStartFrame;
         private SerializedProperty _speed;
+        private SerializedProperty _initialFacingAngle;
+        private SerializedProperty _directionHysteresis;
         private SerializedProperty _rotateParentForBillboard;
         private SerializedProperty _faceCamera;
         private SerializedProperty _useCameraForward;
@@ -31,6 +33,8 @@ namespace KingdomTD.Flipbook.Editor
             _loop = serializedObject.FindProperty("_loop");
             _randomizeLoopStartFrame = serializedObject.FindProperty("_randomizeLoopStartFrame");
             _speed = serializedObject.FindProperty("_speed");
+            _initialFacingAngle = serializedObject.FindProperty("_initialFacingAngle");
+            _directionHysteresis = serializedObject.FindProperty("_directionHysteresis");
             _rotateParentForBillboard = serializedObject.FindProperty("_rotateParentForBillboard");
             _faceCamera = serializedObject.FindProperty("_faceCamera");
             _useCameraForward = serializedObject.FindProperty("_useCameraForward");
@@ -68,6 +72,8 @@ namespace KingdomTD.Flipbook.Editor
             EditorGUILayout.PropertyField(_loop);
             EditorGUILayout.PropertyField(_randomizeLoopStartFrame);
             EditorGUILayout.PropertyField(_speed);
+            FlipbookAnimationInspectorUtility.DrawDirectionFields(_animationAsset, _initialFacingAngle,
+                _directionHysteresis);
             EditorGUILayout.PropertyField(_faceCamera);
             if (_faceCamera.boolValue || _faceCamera.hasMultipleDifferentValues)
             {

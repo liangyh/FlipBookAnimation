@@ -7,6 +7,7 @@ Shader "KingdomTD/Flipbook/World"
         _Columns ("Columns", Float) = 1
         _Rows ("Rows", Float) = 1
         _CurrentFrame ("Current Frame", Float) = 0
+        [HideInInspector] _FlipX ("Flip X", Float) = 0
         [HDR] _ChangeColor ("Change Color", Color) = (1, 1, 1, 1)
         _ChangeRate ("Change Rate", Range(0, 1)) = 0
         _EffectChangeRate ("Effect Rate", Range(0, 1)) = 0
@@ -53,6 +54,7 @@ Shader "KingdomTD/Flipbook/World"
                 UNITY_DEFINE_INSTANCED_PROP(float, _CurrentFrame)
                 UNITY_DEFINE_INSTANCED_PROP(float, _Columns)
                 UNITY_DEFINE_INSTANCED_PROP(float, _Rows)
+                UNITY_DEFINE_INSTANCED_PROP(float, _FlipX)
                 UNITY_DEFINE_INSTANCED_PROP(half4, _ChangeColor)
                 UNITY_DEFINE_INSTANCED_PROP(half, _ChangeRate)
                 UNITY_DEFINE_INSTANCED_PROP(half, _EffectChangeRate)
@@ -88,9 +90,13 @@ Shader "KingdomTD/Flipbook/World"
                 float currentFrame = UNITY_ACCESS_INSTANCED_PROP(FlipbookPerInstance, _CurrentFrame);
                 float columns = UNITY_ACCESS_INSTANCED_PROP(FlipbookPerInstance, _Columns);
                 float rows = UNITY_ACCESS_INSTANCED_PROP(FlipbookPerInstance, _Rows);
+                float flipX = UNITY_ACCESS_INSTANCED_PROP(FlipbookPerInstance, _FlipX);
+
+                float2 uv = input.uv;
+                uv.x = lerp(uv.x, 1.0 - uv.x, step(0.5, flipX));
 
                 output.positionCS = TransformObjectToHClip(input.positionOS);
-                output.uv = GetFrameUV(TRANSFORM_TEX(input.uv, _MainTex), currentFrame, columns, rows);
+                output.uv = GetFrameUV(TRANSFORM_TEX(uv, _MainTex), currentFrame, columns, rows);
                 output.changeColor = UNITY_ACCESS_INSTANCED_PROP(FlipbookPerInstance, _ChangeColor);
                 output.rates.x = UNITY_ACCESS_INSTANCED_PROP(FlipbookPerInstance, _ChangeRate);
                 output.rates.y = UNITY_ACCESS_INSTANCED_PROP(FlipbookPerInstance, _EffectChangeRate);

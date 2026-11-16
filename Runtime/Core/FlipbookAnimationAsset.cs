@@ -18,6 +18,8 @@ namespace KingdomTD.Flipbook
         [Min(1)] [SerializeField] private int _rows = 1;
         [SerializeField] private string _defaultAnimationName = "Idle";
         [SerializeField] private List<FlipbookClipData> _clips = new List<FlipbookClipData>();
+        [Tooltip("为空表示单方向。角度为屏幕空间：0 = 右，90 = 上（远离相机），逆时针。")]
+        [SerializeField] private List<FlipbookDirectionData> _directions = new List<FlipbookDirectionData>();
 
         private Dictionary<string, FlipbookClipData> _clipByName;
 
@@ -29,6 +31,9 @@ namespace KingdomTD.Flipbook
         public int TotalFrameCount => Columns * Rows;
         public string DefaultAnimationName => ResolveDefaultAnimationName();
         public IReadOnlyList<FlipbookClipData> Clips => _clips;
+        public IReadOnlyList<FlipbookDirectionData> Directions => _directions;
+        public int DirectionCount => Mathf.Max(1, _directions.Count);
+        public int AuthoredDirectionCount => FlipbookDirectionResolver.GetAuthoredDirectionCount(_directions);
         public Vector2 FramePixelSize => _mainTexture == null
             ? Vector2.zero
             : new Vector2((float)_mainTexture.width / Columns, (float)_mainTexture.height / Rows);
@@ -84,6 +89,9 @@ namespace KingdomTD.Flipbook
                 results.Add("WorldMaterial 的 _MainTex 与 MainTexture 不一致。");
             }
 
+            ValidateDirections(results);
+            int authoredDirectionCount = AuthoredDirectionCount;
+
             HashSet<string> names = new HashSet<string>();
             for (int i = 0; i < _clips.Count; i++)
             {
@@ -108,6 +116,8 @@ namespace KingdomTD.Flipbook
                 {
                     results.Add($"动画 {clip.AnimationName} 的帧范围超出纹理网格。");
                 }
+
+                ValidateClipDirections(clip, authoredDirectionCount, results);
 
                 if (clip.FrameRate <= 0f || clip.Speed <= 0f)
                 {
@@ -136,6 +146,84 @@ namespace KingdomTD.Flipbook
             }
 
             return results;
+        }
+
+        private void ValidateDirections(List<string> results)
+        {
+            if (_directions.Count == 0)
+            {
+                return;
+            }
+
+            bool hasAuthoredDirection = false;
+            for (int i = 0; i < _directions.Count; i++)
+            {
+                FlipbookDirectionData direction = _directions[i];
+                if (direction == null)
+                {
+                    results.Add($"Directions[{i}] 不能为空。");
+                    continue;
+                }
+
+                string label = string.IsNullOrEmpty(direction.Name) ? $"Directions[{i}]" : direction.Name;
+                if (direction.HasOwnFrames)
+                {
+                    hasAuthoredDirection = true;
+                }
+                else if (direction.SourceDirection == i)
+                {
+                    results.Add($"方向 {label} 的 SourceDirection 不能指向自己，使用自己的帧请填 -1。");
+                }
+                else if (direction.SourceDirection >= _directions.Count)
+                {
+                    results.Add($"方向 {label} 的 SourceDirection {direction.SourceDirection} 超出方向表范围。");
+                }
+                else if (_directions[direction.SourceDirection] == null ||
+                         !_directions[direction.SourceDirection].HasOwnFrames)
+                {
+                    results.Add($"方向 {label} 的 SourceDirection 必须指向一个使用自己帧的方向（不支持链式借用）。");
+                }
+
+                for (int other = 0; other < i; other++)
+                {
+                    FlipbookDirectionData otherDirection = _directions[other];
+                    if (otherDirection != null &&
+                        Mathf.Approximately(Mathf.DeltaAngle(otherDirection.Angle, direction.Angle), 0f))
+                    {
+                        results.Add($"方向 {label} 与 Directions[{other}] 的角度重复。");
+                    }
+                }
+            }
+
+            if (!hasAuthoredDirection)
+            {
+                results.Add("方向表中至少需要一个 SourceDirection = -1 的方向。");
+            }
+        }
+
+        private void ValidateClipDirections(FlipbookClipData clip, int authoredDirectionCount,
+            List<string> results)
+        {
+            if (_directions.Count == 0)
+            {
+                return;
+            }
+
+            int configuredCount = clip.DirectionStartFrames?.Count ?? 0;
+            if (configuredCount != authoredDirectionCount && authoredDirectionCount > 1)
+            {
+                results.Add($"动画 {clip.AnimationName} 的 DirectionStartFrames 数量为 {configuredCount}，" +
+                            $"应与使用自己帧的方向数 {authoredDirectionCount} 一致（缺项将使用 StartFrame）。");
+            }
+
+            for (int i = 0; i < configuredCount; i++)
+            {
+                int startFrame = clip.DirectionStartFrames[i];
+                if (startFrame < 0 || startFrame + clip.FrameCount > TotalFrameCount)
+                {
+                    results.Add($"动画 {clip.AnimationName} 的 DirectionStartFrames[{i}] 帧范围超出纹理网格。");
+                }
+            }
         }
 
         private string ResolveDefaultAnimationName()

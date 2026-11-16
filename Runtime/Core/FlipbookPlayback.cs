@@ -10,6 +10,13 @@ namespace KingdomTD.Flipbook
 
         private readonly Dictionary<string, FlipbookClipData> _clipByName =
             new Dictionary<string, FlipbookClipData>();
+        private readonly List<FlipbookDirectionData> _directions = new List<FlipbookDirectionData>();
+        private int[] _directionFrameSources = { 0 };
+        private bool[] _directionFlips = { false };
+        private int _directionIndex;
+        private int _currentStartFrame;
+        private int _currentLocalFrame;
+        private bool _flipX;
         private FlipbookClipData _currentClip;
         private string _defaultAnimationName;
         private string _currentAnimationName;
@@ -25,14 +32,25 @@ namespace KingdomTD.Flipbook
         public event Action<int> FrameChanged;
         public event Action<string> FrameEvent;
         public event Action<string> Completed;
+        public event Action<bool> FlipXChanged;
 
         public int CurrentFrame => _currentFrame;
         public bool IsPlaying => _isPlaying && !_isPaused;
         public bool IsPaused => _isPaused;
         public string CurrentAnimationName => _currentAnimationName;
+        public int CurrentDirectionIndex => _directionIndex;
+        public int DirectionCount => _directionFrameSources.Length;
+        public bool FlipX => _flipX;
+        public IReadOnlyList<FlipbookDirectionData> Directions => _directions;
 
         public void SetSource(IReadOnlyList<FlipbookClipData> clips, string defaultAnimationName,
             int totalFrameCount)
+        {
+            SetSource(clips, defaultAnimationName, totalFrameCount, null);
+        }
+
+        public void SetSource(IReadOnlyList<FlipbookClipData> clips, string defaultAnimationName,
+            int totalFrameCount, IReadOnlyList<FlipbookDirectionData> directions)
         {
             _clipByName.Clear();
             if (clips != null)
@@ -50,7 +68,42 @@ namespace KingdomTD.Flipbook
 
             _defaultAnimationName = ResolveDefaultAnimationName(defaultAnimationName);
             _totalFrameCount = Mathf.Max(1, totalFrameCount);
+            BuildDirectionCache(directions);
             Reset();
+        }
+
+        /// <summary>
+        /// 切换到指定方向。播放中切换会保留当前局部帧与播放进度，不会重复触发帧事件。
+        /// </summary>
+        public bool SetDirection(int directionIndex)
+        {
+            if (directionIndex < 0 || directionIndex >= _directionFrameSources.Length)
+            {
+                return false;
+            }
+
+            if (directionIndex == _directionIndex)
+            {
+                return true;
+            }
+
+            _directionIndex = directionIndex;
+            ApplyDirection();
+            return true;
+        }
+
+        /// <summary>
+        /// 按屏幕空间角度（0 = 右，逆时针）选择最近的方向。hysteresis 用于避免在方向边界附近来回抖动。
+        /// </summary>
+        public int SetFacingAngle(float angle, float hysteresis = 0f)
+        {
+            if (_directions.Count > 0)
+            {
+                SetDirection(FlipbookDirectionResolver.ResolveIndex(_directions, angle, _directionIndex,
+                    Mathf.Max(0f, hysteresis)));
+            }
+
+            return _directionIndex;
         }
 
         public bool TryGetClip(string animationName, out FlipbookClipData clip)
@@ -81,13 +134,14 @@ namespace KingdomTD.Flipbook
 
             _currentClip = clip;
             _currentAnimationName = resolvedAnimationName;
+            _currentStartFrame = clip.GetStartFrame(_directionFrameSources[_directionIndex]);
             _loop = loop;
             _speed = Mathf.Max(0f, speed);
             _framePosition = startLocalFrame;
             _currentAbsoluteFrame = startLocalFrame;
             _isPlaying = true;
             _isPaused = false;
-            SetFrame(clip.StartFrame + startLocalFrame, true);
+            SetLocalFrame(startLocalFrame, true);
             TriggerEventsAtLocalFrame(startLocalFrame);
             return true;
         }
@@ -126,21 +180,21 @@ namespace KingdomTD.Flipbook
             {
                 int localFrame = (int)(targetAbsoluteFrame % _currentClip.FrameCount);
                 _currentAbsoluteFrame = targetAbsoluteFrame;
-                SetFrame(_currentClip.StartFrame + localFrame);
+                SetLocalFrame(localFrame);
                 return;
             }
 
             if (targetAbsoluteFrame >= _currentClip.FrameCount)
             {
                 _currentAbsoluteFrame = _currentClip.FrameCount;
-                SetFrame(_currentClip.StartFrame + _currentClip.FrameCount - 1);
+                SetLocalFrame(_currentClip.FrameCount - 1);
                 _isPlaying = false;
                 Completed?.Invoke(_currentAnimationName);
                 return;
             }
 
             _currentAbsoluteFrame = targetAbsoluteFrame;
-            SetFrame(_currentClip.StartFrame + (int)targetAbsoluteFrame);
+            SetLocalFrame((int)targetAbsoluteFrame);
         }
 
         public void Pause()
@@ -167,7 +221,7 @@ namespace KingdomTD.Flipbook
             _currentAbsoluteFrame = 0;
             if (resetToFirstFrame && _currentClip != null)
             {
-                SetFrame(_currentClip.StartFrame);
+                SetLocalFrame(0);
             }
         }
 
@@ -189,13 +243,15 @@ namespace KingdomTD.Flipbook
                 : Mathf.FloorToInt(clampedTime * _currentClip.FrameCount);
             _currentAbsoluteFrame = localFrame;
             _framePosition = localFrame;
-            SetFrame(_currentClip.StartFrame + localFrame);
+            SetLocalFrame(localFrame);
         }
 
         public void Reset()
         {
             _currentClip = null;
             _currentAnimationName = null;
+            _currentStartFrame = 0;
+            _currentLocalFrame = 0;
             _framePosition = 0d;
             _currentAbsoluteFrame = 0;
             _speed = 1f;
@@ -228,6 +284,65 @@ namespace KingdomTD.Flipbook
             }
 
             return string.Empty;
+        }
+
+        private void BuildDirectionCache(IReadOnlyList<FlipbookDirectionData> directions)
+        {
+            _directions.Clear();
+            if (directions != null)
+            {
+                for (int i = 0; i < directions.Count; i++)
+                {
+                    _directions.Add(directions[i]);
+                }
+            }
+
+            int directionCount = Mathf.Max(1, _directions.Count);
+            if (_directionFrameSources.Length != directionCount)
+            {
+                _directionFrameSources = new int[directionCount];
+                _directionFlips = new bool[directionCount];
+            }
+
+            _directionFrameSources[0] = 0;
+            _directionFlips[0] = false;
+            for (int i = 0; i < _directions.Count; i++)
+            {
+                FlipbookDirectionResolver.ResolveSource(_directions, i, out _directionFrameSources[i],
+                    out _directionFlips[i]);
+            }
+
+            _directionIndex = 0;
+            SetFlipX(_directionFlips[0]);
+        }
+
+        private void ApplyDirection()
+        {
+            SetFlipX(_directionFlips[_directionIndex]);
+            if (_currentClip == null)
+            {
+                return;
+            }
+
+            _currentStartFrame = _currentClip.GetStartFrame(_directionFrameSources[_directionIndex]);
+            SetFrame(_currentStartFrame + _currentLocalFrame);
+        }
+
+        private void SetFlipX(bool flipX)
+        {
+            if (_flipX == flipX)
+            {
+                return;
+            }
+
+            _flipX = flipX;
+            FlipXChanged?.Invoke(_flipX);
+        }
+
+        private void SetLocalFrame(int localFrame, bool force = false)
+        {
+            _currentLocalFrame = localFrame;
+            SetFrame(_currentStartFrame + localFrame, force);
         }
 
         private void SetFrame(int frame, bool force = false)

@@ -17,6 +17,8 @@ namespace KingdomTD.Flipbook.Editor
         private SerializedProperty _pauseWhenCulled;
         private SerializedProperty _preserveAspect;
         private SerializedProperty _speed;
+        private SerializedProperty _initialFacingAngle;
+        private SerializedProperty _directionHysteresis;
         private SerializedProperty _frameEvent;
         private SerializedProperty _animationCompleted;
 
@@ -32,6 +34,8 @@ namespace KingdomTD.Flipbook.Editor
             _pauseWhenCulled = serializedObject.FindProperty("_pauseWhenCulled");
             _preserveAspect = serializedObject.FindProperty("_preserveAspect");
             _speed = serializedObject.FindProperty("_speed");
+            _initialFacingAngle = serializedObject.FindProperty("_initialFacingAngle");
+            _directionHysteresis = serializedObject.FindProperty("_directionHysteresis");
             _frameEvent = serializedObject.FindProperty("_frameEvent");
             _animationCompleted = serializedObject.FindProperty("_animationCompleted");
         }
@@ -64,6 +68,8 @@ namespace KingdomTD.Flipbook.Editor
             EditorGUILayout.PropertyField(_pauseWhenCulled);
             EditorGUILayout.PropertyField(_preserveAspect);
             EditorGUILayout.PropertyField(_speed);
+            FlipbookAnimationInspectorUtility.DrawDirectionFields(_animationAsset, _initialFacingAngle,
+                _directionHysteresis);
             AppearanceControlsGUI();
             RaycastControlsGUI();
             MaskableControlsGUI();

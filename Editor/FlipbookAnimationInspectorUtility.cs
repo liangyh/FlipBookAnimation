@@ -19,6 +19,20 @@ namespace KingdomTD.Flipbook.Editor
         private static readonly Dictionary<int, GUIContent[]> RuntimeDisplayNamesByAsset =
             new Dictionary<int, GUIContent[]>();
 
+        internal static void DrawDirectionFields(SerializedProperty animationAssetProperty,
+            SerializedProperty initialFacingAngleProperty, SerializedProperty directionHysteresisProperty)
+        {
+            if (!animationAssetProperty.hasMultipleDifferentValues &&
+                (animationAssetProperty.objectReferenceValue is not FlipbookAnimationAsset animationAsset ||
+                 animationAsset.Directions.Count == 0))
+            {
+                return;
+            }
+
+            EditorGUILayout.PropertyField(initialFacingAngleProperty);
+            EditorGUILayout.PropertyField(directionHysteresisProperty);
+        }
+
         internal static bool DrawSerializedAnimationPopup(SerializedProperty animationAssetProperty,
             SerializedProperty animationNameProperty)
         {

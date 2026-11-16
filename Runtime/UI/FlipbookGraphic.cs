@@ -22,6 +22,12 @@ namespace KingdomTD.Flipbook
         [SerializeField] private bool _preserveAspect = true;
         [Min(0f)] [SerializeField] private float _speed = 1f;
 
+        [Header("Direction")]
+        [Tooltip("尚未调用 SetFacing 系列方法时使用的屏幕朝向角度：0 = 右，90 = 上，270 = 下。")]
+        [SerializeField] private float _initialFacingAngle = 270f;
+        [Tooltip("方向边界附近的回差角度，避免朝向在两个方向之间来回抖动。")]
+        [Range(0f, 45f)] [SerializeField] private float _directionHysteresis = 5f;
+
         [Header("Events")]
         [SerializeField] private UnityEvent<string> _frameEvent = new UnityEvent<string>();
         [SerializeField] private UnityEvent<string> _animationCompleted = new UnityEvent<string>();
@@ -29,6 +35,8 @@ namespace KingdomTD.Flipbook
         private readonly FlipbookPlayback _playback = new FlipbookPlayback();
         private bool _callbacksAttached;
         private bool _isReady;
+        private bool _hasFacingAngle;
+        private float _facingAngle;
 
         public event Action<string> FrameEvent;
         public event Action<string> AnimationCompleted;
@@ -38,6 +46,9 @@ namespace KingdomTD.Flipbook
         public string CurrentAnimationName => _playback.CurrentAnimationName;
         public bool IsPlaying => _playback.IsPlaying;
         public bool IsReady => _isReady;
+        public int CurrentDirectionIndex => _playback.CurrentDirectionIndex;
+        public bool IsFlippedX => _playback.FlipX;
+        public float FacingAngle => _hasFacingAngle ? _facingAngle : _initialFacingAngle;
         public bool PreserveAspect
         {
             get => _preserveAspect;
@@ -110,7 +121,8 @@ namespace KingdomTD.Flipbook
             }
 
             _playback.SetSource(_animationAsset.Clips, ResolveDefaultAnimationName(),
-                _animationAsset.TotalFrameCount);
+                _animationAsset.TotalFrameCount, _animationAsset.Directions);
+            _playback.SetFacingAngle(FacingAngle);
             _isReady = _animationAsset.Clips.Count > 0;
             SetMaterialDirty();
             SetVerticesDirty();
@@ -144,6 +156,48 @@ namespace KingdomTD.Flipbook
             bool forceRestart = true)
         {
             return _isReady && _playback.Play(animationName, loop, speed, _randomizeLoopStartFrame, forceRestart);
+        }
+
+        /// <summary>
+        /// 设置朝向后播放。方向由角度自动选择最接近的方向。
+        /// </summary>
+        public bool Play(string animationName, float facingAngle, bool loop = true, float speed = 1f,
+            bool forceRestart = true)
+        {
+            SetFacingAngle(facingAngle);
+            return Play(animationName, loop, speed, forceRestart);
+        }
+
+        /// <summary>
+        /// 设置屏幕空间朝向角度（0 = 右，90 = 上，逆时针）。播放中切换方向不会重播动画。
+        /// </summary>
+        public void SetFacingAngle(float screenAngleDegrees)
+        {
+            _facingAngle = Mathf.Repeat(screenAngleDegrees, 360f);
+            _hasFacingAngle = true;
+            if (_isReady)
+            {
+                _playback.SetFacingAngle(_facingAngle, _directionHysteresis);
+            }
+        }
+
+        /// <summary>
+        /// 设置屏幕空间朝向（x = 右，y = 上）。零向量会被忽略并保持当前方向。
+        /// </summary>
+        public bool SetFacing(Vector2 screenDirection)
+        {
+            if (!FlipbookDirectionResolver.TryGetAngle(screenDirection, out float angle))
+            {
+                return false;
+            }
+
+            SetFacingAngle(angle);
+            return true;
+        }
+
+        public bool SetDirection(int directionIndex)
+        {
+            return _isReady && _playback.SetDirection(directionIndex);
         }
 
         public void Pause()
@@ -205,15 +259,18 @@ namespace KingdomTD.Flipbook
             }
 
             Rect uvRect = _animationAsset.GetFrameUvRect(_playback.CurrentFrame);
+            bool flipX = _playback.FlipX;
+            float uvLeft = flipX ? uvRect.xMax : uvRect.xMin;
+            float uvRight = flipX ? uvRect.xMin : uvRect.xMax;
             Color32 vertexColor = color;
             vertexHelper.AddVert(new Vector3(drawRect.xMin, drawRect.yMin), vertexColor,
-                new Vector2(uvRect.xMin, uvRect.yMin));
+                new Vector2(uvLeft, uvRect.yMin));
             vertexHelper.AddVert(new Vector3(drawRect.xMin, drawRect.yMax), vertexColor,
-                new Vector2(uvRect.xMin, uvRect.yMax));
+                new Vector2(uvLeft, uvRect.yMax));
             vertexHelper.AddVert(new Vector3(drawRect.xMax, drawRect.yMax), vertexColor,
-                new Vector2(uvRect.xMax, uvRect.yMax));
+                new Vector2(uvRight, uvRect.yMax));
             vertexHelper.AddVert(new Vector3(drawRect.xMax, drawRect.yMin), vertexColor,
-                new Vector2(uvRect.xMax, uvRect.yMin));
+                new Vector2(uvRight, uvRect.yMin));
             vertexHelper.AddTriangle(0, 1, 2);
             vertexHelper.AddTriangle(2, 3, 0);
         }
@@ -226,6 +283,7 @@ namespace KingdomTD.Flipbook
             }
 
             _playback.FrameChanged += OnFrameChanged;
+            _playback.FlipXChanged += OnFlipXChanged;
             _playback.FrameEvent += OnFrameEvent;
             _playback.Completed += OnAnimationCompleted;
             _callbacksAttached = true;
@@ -239,6 +297,11 @@ namespace KingdomTD.Flipbook
         }
 
         private void OnFrameChanged(int frame)
+        {
+            SetVerticesDirty();
+        }
+
+        private void OnFlipXChanged(bool flipX)
         {
             SetVerticesDirty();
         }
@@ -284,6 +347,11 @@ namespace KingdomTD.Flipbook
         protected override void OnValidate()
         {
             base.OnValidate();
+            if (_isReady && !_hasFacingAngle)
+            {
+                _playback.SetFacingAngle(_initialFacingAngle);
+            }
+
             SetMaterialDirty();
             SetVerticesDirty();
         }

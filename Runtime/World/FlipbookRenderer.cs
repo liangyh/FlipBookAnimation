@@ -22,6 +22,12 @@ namespace KingdomTD.Flipbook
         [SerializeField] private bool _randomizeLoopStartFrame = true;
         [Min(0f)] [SerializeField] private float _speed = 1f;
 
+        [Header("Direction")]
+        [Tooltip("尚未调用 SetFacing 系列方法时使用的屏幕朝向角度：0 = 右，90 = 上，270 = 下。")]
+        [SerializeField] private float _initialFacingAngle = 270f;
+        [Tooltip("方向边界附近的回差角度，避免朝向在两个方向之间来回抖动。")]
+        [Range(0f, 45f)] [SerializeField] private float _directionHysteresis = 5f;
+
         [Header("Billboard")]
         [SerializeField] private bool _faceCamera = true;
         [Tooltip("启用时旋转父节点；父节点不存在时旋转自身。")]
@@ -35,6 +41,7 @@ namespace KingdomTD.Flipbook
         private static readonly int CurrentFrameId = Shader.PropertyToID("_CurrentFrame");
         private static readonly int ColumnsId = Shader.PropertyToID("_Columns");
         private static readonly int RowsId = Shader.PropertyToID("_Rows");
+        private static readonly int FlipXId = Shader.PropertyToID("_FlipX");
         private static readonly int ChangeColorId = Shader.PropertyToID("_ChangeColor");
         private static readonly int ChangeRateId = Shader.PropertyToID("_ChangeRate");
         private static readonly int EffectChangeRateId = Shader.PropertyToID("_EffectChangeRate");
@@ -48,6 +55,8 @@ namespace KingdomTD.Flipbook
         private MaterialPropertyBlock _propertyBlock;
         private bool _callbacksAttached;
         private bool _isReady;
+        private bool _hasFacingAngle;
+        private float _facingAngle;
 
         public event Action<string> FrameEvent;
         public event Action<string> AnimationCompleted;
@@ -60,6 +69,9 @@ namespace KingdomTD.Flipbook
         public string CurrentAnimationName => _playback.CurrentAnimationName;
         public bool IsPlaying => _playback.IsPlaying;
         public bool IsReady => _isReady;
+        public int CurrentDirectionIndex => _playback.CurrentDirectionIndex;
+        public bool IsFlippedX => _playback.FlipX;
+        public float FacingAngle => _hasFacingAngle ? _facingAngle : _initialFacingAngle;
 
         private void Reset()
         {
@@ -142,7 +154,9 @@ namespace KingdomTD.Flipbook
             _isReady = true;
             ResetPresentation();
             _playback.SetSource(_animationAsset.Clips, ResolveDefaultAnimationName(),
-                _animationAsset.TotalFrameCount);
+                _animationAsset.TotalFrameCount, _animationAsset.Directions);
+            _playback.SetFacingAngle(FacingAngle);
+            SetFlipX(_playback.FlipX);
             return true;
         }
 
@@ -176,6 +190,65 @@ namespace KingdomTD.Flipbook
             bool forceRestart = true)
         {
             return _isReady && _playback.Play(animationName, loop, speed, _randomizeLoopStartFrame, forceRestart);
+        }
+
+        /// <summary>
+        /// 设置朝向后播放。方向由角度自动选择最接近的方向。
+        /// </summary>
+        public bool Play(string animationName, float facingAngle, bool loop = true, float speed = 1f,
+            bool forceRestart = true)
+        {
+            SetFacingAngle(facingAngle);
+            return Play(animationName, loop, speed, forceRestart);
+        }
+
+        /// <summary>
+        /// 设置屏幕空间朝向角度（0 = 右，90 = 上/远离相机，逆时针）。播放中切换方向不会重播动画。
+        /// </summary>
+        public void SetFacingAngle(float screenAngleDegrees)
+        {
+            _facingAngle = Mathf.Repeat(screenAngleDegrees, 360f);
+            _hasFacingAngle = true;
+            if (_isReady)
+            {
+                _playback.SetFacingAngle(_facingAngle, _directionHysteresis);
+            }
+        }
+
+        /// <summary>
+        /// 设置屏幕空间朝向（x = 右，y = 上）。零向量会被忽略并保持当前方向。
+        /// </summary>
+        public bool SetFacing(Vector2 screenDirection)
+        {
+            if (!FlipbookDirectionResolver.TryGetAngle(screenDirection, out float angle))
+            {
+                return false;
+            }
+
+            SetFacingAngle(angle);
+            return true;
+        }
+
+        /// <summary>
+        /// 设置地面（XZ 平面）上的世界朝向，例如移动速度。会根据主相机的水平朝向转换为屏幕角度。
+        /// 零向量会被忽略并保持当前方向。
+        /// </summary>
+        public bool SetFacingWorld(Vector3 worldDirection)
+        {
+            Camera camera = GetCachedCamera();
+            if (!FlipbookDirectionResolver.TryGetScreenAngle(worldDirection,
+                    camera != null ? camera.transform : null, Vector3.up, out float angle))
+            {
+                return false;
+            }
+
+            SetFacingAngle(angle);
+            return true;
+        }
+
+        public bool SetDirection(int directionIndex)
+        {
+            return _isReady && _playback.SetDirection(directionIndex);
         }
 
         public void Pause()
@@ -270,6 +343,7 @@ namespace KingdomTD.Flipbook
             }
 
             _playback.FrameChanged += SetFrame;
+            _playback.FlipXChanged += SetFlipX;
             _playback.FrameEvent += OnFrameEvent;
             _playback.Completed += OnAnimationCompleted;
             _callbacksAttached = true;
@@ -289,6 +363,7 @@ namespace KingdomTD.Flipbook
             _propertyBlock.SetFloat(ChangeRateId, 0f);
             _propertyBlock.SetFloat(EffectChangeRateId, 0f);
             _propertyBlock.SetFloat(CurrentFrameId, 0f);
+            _propertyBlock.SetFloat(FlipXId, 0f);
             _propertyBlock.SetFloat(ColumnsId, _animationAsset.Columns);
             _propertyBlock.SetFloat(RowsId, _animationAsset.Rows);
             ApplyPropertyBlock();
@@ -305,6 +380,17 @@ namespace KingdomTD.Flipbook
             ApplyPropertyBlock();
         }
 
+        private void SetFlipX(bool flipX)
+        {
+            if (!_isReady)
+            {
+                return;
+            }
+
+            _propertyBlock.SetFloat(FlipXId, flipX ? 1f : 0f);
+            ApplyPropertyBlock();
+        }
+
         private void RestoreRequiredPropertiesIfNeeded()
         {
             if (_propertyBlock.GetFloat(ColumnsId) >= 1f && _propertyBlock.GetFloat(RowsId) >= 1f)
@@ -313,6 +399,7 @@ namespace KingdomTD.Flipbook
             }
 
             _propertyBlock.SetFloat(CurrentFrameId, _playback.CurrentFrame);
+            _propertyBlock.SetFloat(FlipXId, _playback.FlipX ? 1f : 0f);
             _propertyBlock.SetFloat(ColumnsId, _animationAsset.Columns);
             _propertyBlock.SetFloat(RowsId, _animationAsset.Rows);
             ApplyPropertyBlock();
@@ -378,6 +465,10 @@ namespace KingdomTD.Flipbook
         private void OnValidate()
         {
             SynchronizeRendererResources();
+            if (_isReady && !_hasFacingAngle)
+            {
+                _playback.SetFacingAngle(_initialFacingAngle);
+            }
         }
 #endif
     }

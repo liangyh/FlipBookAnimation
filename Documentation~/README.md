@@ -11,11 +11,57 @@
 - `Main Texture`：原始序列帧网格纹理，不生成低清副本。
 - `Columns`、`Rows`：纹理网格的列数和行数，帧顺序为从左到右、从上到下。
 - `Default Animation Name`：调用 `Play()` 时没有传动作名所使用的动作。
-- `Clips`：动作名、起始帧、帧数、帧率、动作速度和帧事件。
+- `Clips`：动作名、起始帧、帧数、帧率、动作速度、分方向起始帧和帧事件。
+- `Directions`：可选的方向表；为空表示单方向（旧资产保持原行为）。
 - `World Material`：场景渲染共享材质，使用 `KingdomTD/Flipbook/World` Shader。
 - `Effect Texture`：场景表现的可选扩展纹理；默认 UGUI 渲染不采样它。
 
 Inspector 会校验动作重名、越界帧、无效帧率和事件帧，并提供动作预览。
+
+## 多方向动画
+
+一个动作（如 `Walk`）可以有多个朝向。业务代码只需告诉组件朝向，再调用 `Play`，组件会选出角度最接近的方向。
+
+### 方向表
+
+`Directions` 中每一项包含：
+
+| 字段 | 说明 |
+|---|---|
+| `Name` | 显示名，例如 `E`、`NE`。 |
+| `Angle` | 屏幕空间角度：0 = 右，90 = 上（远离相机），180 = 左，270 = 下，逆时针递增。 |
+| `SourceDirection` | `-1` 表示使用本方向自己的帧；`>= 0` 表示复用该索引方向的帧（目标必须使用自己的帧，不支持链式借用）。 |
+| `FlipX` | 采样时水平翻转。 |
+
+资产 Inspector 的 **方向工具** 提供 `单方向 / 左右 / 4 方向 / 8 方向` 预设。8 方向预设只需美术绘制 `E、NE、N、S、SE` 五个方向，`NW、W、SW` 分别翻转 `NE、E、SE`。若美术画的是左朝向，把对应方向改为使用自己的帧，另一侧设置 `SourceDirection` + `FlipX` 即可。
+
+### 分方向帧
+
+同一动作的所有方向共享 `FrameCount`、`FrameRate`、`Speed` 与 `Events`；每个 **使用自己帧的方向** 在 Clip 的 `DirectionStartFrames` 中按方向表顺序拥有一个起始帧。列表为空或缺项时使用 `StartFrame`。
+
+常见“每个方向一行”的布局可在 **方向工具** 中设置 `方向帧步长` 后点击 **填充所有动画**，按 `StartFrame + k × 步长` 生成（步长为 0 时使用各动画的 `FrameCount`）。Inspector 会显示 `DirectionStartFrames` 索引与方向的对应关系，并校验越界、数量不一致、角度重复和无效的 `SourceDirection`。预览区可切换方向查看翻转效果。
+
+### 运行时接口
+
+```csharp
+// 地面（XZ 平面）上的世界方向，例如移动速度；会按主相机的水平朝向换算为屏幕角度
+renderer.SetFacingWorld(agent.velocity);
+renderer.Play("Walk", forceRestart: false);
+
+// 直接给屏幕空间方向或角度（2D XY 平面游戏可直接传速度）
+renderer.SetFacing(new Vector2(velocity.x, velocity.y));
+renderer.SetFacingAngle(135f);
+renderer.Play("Attack", facingAngle: 135f, loop: false);
+
+int direction = renderer.CurrentDirectionIndex;
+bool flipped = renderer.IsFlippedX;
+```
+
+- 播放中切换方向只替换起始帧和翻转状态，保留当前帧进度，不会重复触发帧事件或完成事件。
+- 零向量会被忽略并保持当前方向。
+- 组件的 `Initial Facing Angle`（默认 270°，朝下）用于尚未设置朝向时；`Direction Hysteresis`（默认 5°）避免在方向边界来回抖动。
+- 翻转由 Shader 的实例属性 `_FlipX`（场景）或顶点 UV（UGUI）完成，不修改 Transform，不影响合批。
+- `FlipbookGraphic` 提供同样的 `SetFacingAngle`、`SetFacing`、`Play(name, facingAngle, ...)` 与 `SetDirection` 接口。
 
 ## 拖放生成对象
 

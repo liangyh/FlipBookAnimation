@@ -41,6 +41,7 @@ https://github.com/liangyh/FlipBookAnimation.git#v1.0.1
    - **Columns / Rows**：纹理的列数和行数。
    - **Default Animation Name**：未指定名称时播放的动画。
    - **Clips**：为每个动作设置名称、起始帧、帧数、帧率、速度和可选帧事件。
+   - **Directions**（可选）：多方向动画的方向表，可在 Inspector 的 **方向工具** 中一键套用 4/8 方向预设，部分方向通过水平翻转复用其他方向的帧。
 4. 用 Shader `KingdomTD/Flipbook/World` 新建一个材质，并赋给 **World Material**；将主纹理设置为 `_MainTex`。资源在 Inspector 中会自动同步列数、行数与纹理。
 
 > 例如：4 列 × 2 行的纹理共有 8 帧；`Run` 动画可配置为 `Start Frame = 0`、`Frame Count = 8`、`Frame Rate = 12`。
@@ -66,6 +67,13 @@ public class PlayEffect : MonoBehaviour
         flipbook.SetChangeRate(0.5f);
     }
 }
+```
+
+配置了方向表的资源，只需设置朝向再播放，组件会按角度选择最接近的方向，播放中切换方向不会重播动画：
+
+```csharp
+flipbook.SetFacingWorld(velocity);      // 地面上的世界方向，按相机朝向换算
+flipbook.Play("Walk", forceRestart: false);
 ```
 
 使用 `Pause()`、`Resume()`、`Stop()` 控制播放；`SetTimeMode(FlipbookTimeMode.Unscaled)` 可改用非缩放时间。`SetEffectChangeRate()` 可混合资源材质中的可选 **Effect Texture**。
