@@ -3,6 +3,7 @@
   "rootNamespace": "KingdomTD.Flipbook.Tests",
   "references": [
     "KingdomTD.Flipbook",
+    "KingdomTD.Flipbook.Editor",
     "UnityEngine.TestRunner",
     "UnityEditor.TestRunner"
   ],

@@ -41,7 +41,7 @@ https://github.com/liangyh/FlipBookAnimation.git#v1.0.1
    - **Columns / Rows**：纹理的列数和行数。
    - **Default Animation Name**：未指定名称时播放的动画。
    - **Clips**：为每个动作设置名称、起始帧、帧数、帧率、速度和可选帧事件。
-   - **Directions**（可选）：多方向动画的方向表，可在 Inspector 的 **方向工具** 中一键套用 4/8 方向预设，部分方向通过水平翻转复用其他方向的帧。
+   - **Directions**（可选）：多方向动画的方向表，在 Inspector 的 **朝向** 区域选择 4/8 方向模板，部分方向可镜像其他方向的帧；**动画** 区域按方向名称设置各方向的起始帧并显示首帧缩略图。
 4. 用 Shader `KingdomTD/Flipbook/World` 新建一个材质，并赋给 **World Material**；将主纹理设置为 `_MainTex`。资源在 Inspector 中会自动同步列数、行数与纹理。
 
 > 例如：4 列 × 2 行的纹理共有 8 帧；`Run` 动画可配置为 `Start Frame = 0`、`Frame Count = 8`、`Frame Rate = 12`。

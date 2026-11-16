@@ -210,19 +210,30 @@ namespace KingdomTD.Flipbook
             }
 
             int configuredCount = clip.DirectionStartFrames?.Count ?? 0;
-            if (configuredCount != authoredDirectionCount && authoredDirectionCount > 1)
+            if (configuredCount < authoredDirectionCount && authoredDirectionCount > 1)
             {
-                results.Add($"动画 {clip.AnimationName} 的 DirectionStartFrames 数量为 {configuredCount}，" +
-                            $"应与使用自己帧的方向数 {authoredDirectionCount} 一致（缺项将使用 StartFrame）。");
+                results.Add($"动画 {clip.AnimationName} 有 {authoredDirectionCount - configuredCount} 个方向未设置起始帧，" +
+                            "将使用 StartFrame。");
             }
 
-            for (int i = 0; i < configuredCount; i++)
+            int authoredIndex = 0;
+            for (int i = 0; i < _directions.Count && authoredIndex < configuredCount; i++)
             {
-                int startFrame = clip.DirectionStartFrames[i];
+                FlipbookDirectionData direction = _directions[i];
+                if (direction == null || !direction.HasOwnFrames)
+                {
+                    continue;
+                }
+
+                int startFrame = clip.DirectionStartFrames[authoredIndex];
                 if (startFrame < 0 || startFrame + clip.FrameCount > TotalFrameCount)
                 {
-                    results.Add($"动画 {clip.AnimationName} 的 DirectionStartFrames[{i}] 帧范围超出纹理网格。");
+                    string label = string.IsNullOrEmpty(direction.Name) ? $"#{i}" : direction.Name;
+                    results.Add($"动画 {clip.AnimationName} 的 {label} 方向帧范围（第 {startFrame} – " +
+                                $"{startFrame + clip.FrameCount - 1} 帧）超出纹理网格（共 {TotalFrameCount} 帧）。");
                 }
+
+                authoredIndex++;
             }
         }
 

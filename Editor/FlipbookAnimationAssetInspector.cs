@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using System.Text;
 using UnityEditor;
@@ -8,53 +9,58 @@ namespace KingdomTD.Flipbook.Editor
     [CustomEditor(typeof(FlipbookAnimationAsset))]
     public sealed class FlipbookAnimationAssetInspector : UnityEditor.Editor
     {
-        private static readonly (string Name, float Angle, int Source, bool FlipX)[] TwoDirectionPreset =
-        {
-            ("Right", 0f, -1, false),
-            ("Left", 180f, 0, true)
-        };
-
-        private static readonly (string Name, float Angle, int Source, bool FlipX)[] FourDirectionPreset =
-        {
-            ("E", 0f, -1, false),
-            ("N", 90f, -1, false),
-            ("W", 180f, 0, true),
-            ("S", 270f, -1, false)
-        };
-
-        private static readonly (string Name, float Angle, int Source, bool FlipX)[] EightDirectionPreset =
-        {
-            ("E", 0f, -1, false),
-            ("NE", 45f, -1, false),
-            ("N", 90f, -1, false),
-            ("NW", 135f, 1, true),
-            ("W", 180f, 0, true),
-            ("SW", 225f, 7, true),
-            ("S", 270f, -1, false),
-            ("SE", 315f, -1, false)
-        };
+        private static readonly GUIContent MainTextureLabel = new GUIContent("主纹理", "序列帧网格纹理。");
+        private static readonly GUIContent EffectTextureLabel = new GUIContent("效果纹理（可选）",
+            "场景渲染时可通过 SetEffectChangeRate 混合的扩展纹理。");
+        private static readonly GUIContent WorldMaterialLabel = new GUIContent("场景材质",
+            "使用 KingdomTD/Flipbook/World Shader 的共享材质，纹理与网格会自动同步。");
+        private static readonly GUIContent GridLabel = new GUIContent("网格（列 × 行）",
+            "帧顺序为从左到右、从上到下，从 0 开始编号。");
 
         private readonly List<string> _validationErrors = new List<string>();
+        private readonly List<Action> _pendingActions = new List<Action>();
+        private readonly FlipbookDirectionSectionGUI _directionSection = new FlipbookDirectionSectionGUI();
+        private readonly FlipbookClipSectionGUI _clipSection = new FlipbookClipSectionGUI();
         private int _previewClipIndex;
-        private int _previewDirectionIndex;
-        private int _directionFrameStride;
         private bool _previewPlaying = true;
         private double _previewStartTime;
 
         private void OnEnable()
         {
             _previewStartTime = EditorApplication.timeSinceStartup;
+            _directionSection.SelectionChanged += RestartPreview;
             SynchronizeWorldMaterial((FlipbookAnimationAsset)target, false);
+        }
+
+        private void OnDisable()
+        {
+            _directionSection.SelectionChanged -= RestartPreview;
         }
 
         public override void OnInspectorGUI()
         {
             FlipbookAnimationAsset animationAsset = (FlipbookAnimationAsset)target;
             serializedObject.Update();
+            _pendingActions.Clear();
+
+            DrawValidationErrors(animationAsset);
+
             EditorGUI.BeginChangeCheck();
-            DrawPropertiesExcluding(serializedObject, "m_Script");
-            bool inspectorChanged = EditorGUI.EndChangeCheck();
-            if (inspectorChanged)
+            DrawTextureSection(animationAsset);
+            bool textureChanged = EditorGUI.EndChangeCheck();
+
+            List<FlipbookDirectionEditModel> directions = FlipbookDirectionEditing.Read(serializedObject);
+            _directionSection.Draw(serializedObject, directions, _pendingActions);
+            _clipSection.Draw(serializedObject, animationAsset, directions, _pendingActions);
+
+            bool hasPendingActions = _pendingActions.Count > 0;
+            for (int i = 0; i < _pendingActions.Count; i++)
+            {
+                _pendingActions[i]();
+            }
+
+            _pendingActions.Clear();
+            if (textureChanged)
             {
                 Material pendingMaterial = serializedObject.FindProperty("_worldMaterial").objectReferenceValue
                     as Material;
@@ -64,151 +70,78 @@ namespace KingdomTD.Flipbook.Editor
                 }
             }
 
-            bool propertiesChanged = serializedObject.ApplyModifiedProperties();
-            if (propertiesChanged)
+            if (serializedObject.ApplyModifiedProperties())
             {
-                SynchronizeWorldMaterial(animationAsset, true);
+                SynchronizeWorldMaterial(animationAsset, textureChanged);
             }
 
+            if (hasPendingActions)
+            {
+                GUIUtility.ExitGUI();
+            }
+        }
+
+        private void DrawValidationErrors(FlipbookAnimationAsset animationAsset)
+        {
             animationAsset.GetValidationErrors(_validationErrors);
+            if (_validationErrors.Count == 0)
+            {
+                return;
+            }
+
+            StringBuilder message = new StringBuilder($"有 {_validationErrors.Count} 个问题需要处理：");
             for (int i = 0; i < _validationErrors.Count; i++)
             {
-                EditorGUILayout.HelpBox(_validationErrors[i], MessageType.Error);
+                message.Append("\n• ").Append(_validationErrors[i]);
             }
+
+            EditorGUILayout.HelpBox(message.ToString(), MessageType.Error);
+        }
+
+        private void DrawTextureSection(FlipbookAnimationAsset animationAsset)
+        {
+            FlipbookInspectorStyles.SectionHeader("纹理与网格");
+            EditorGUILayout.PropertyField(serializedObject.FindProperty("_mainTexture"), MainTextureLabel);
+            EditorGUILayout.PropertyField(serializedObject.FindProperty("_effectTexture"), EffectTextureLabel);
+            EditorGUILayout.PropertyField(serializedObject.FindProperty("_worldMaterial"), WorldMaterialLabel);
+
+            SerializedProperty columns = serializedObject.FindProperty("_columns");
+            SerializedProperty rows = serializedObject.FindProperty("_rows");
+            Rect gridRect = EditorGUI.PrefixLabel(EditorGUILayout.GetControlRect(), GridLabel);
+            float fieldWidth = (gridRect.width - 20f) * 0.5f;
+            Rect columnsRect = new Rect(gridRect.x, gridRect.y, fieldWidth, gridRect.height);
+            Rect separatorRect = new Rect(columnsRect.xMax, gridRect.y, 20f, gridRect.height);
+            Rect rowsRect = new Rect(separatorRect.xMax, gridRect.y, fieldWidth, gridRect.height);
+            int indentLevel = EditorGUI.indentLevel;
+            EditorGUI.indentLevel = 0;
+            DrawPositiveIntField(columnsRect, columns);
+            GUI.Label(separatorRect, "×", FlipbookInspectorStyles.CenteredMiniLabel);
+            DrawPositiveIntField(rowsRect, rows);
+            EditorGUI.indentLevel = indentLevel;
 
             if (animationAsset.MainTexture != null)
             {
                 Vector2 frameSize = animationAsset.FramePixelSize;
-                EditorGUILayout.HelpBox(
-                    $"总帧数：{animationAsset.TotalFrameCount}，单帧尺寸：{frameSize.x:0.##} × {frameSize.y:0.##}",
-                    MessageType.Info);
-            }
-
-            DrawDirectionTools(animationAsset);
-        }
-
-        private void DrawDirectionTools(FlipbookAnimationAsset animationAsset)
-        {
-            EditorGUILayout.Space();
-            EditorGUILayout.LabelField("方向工具", EditorStyles.boldLabel);
-            using (new EditorGUILayout.HorizontalScope())
-            {
-                EditorGUILayout.PrefixLabel("方向预设");
-                if (GUILayout.Button("单方向", EditorStyles.miniButtonLeft))
-                {
-                    ApplyDirectionPreset(null);
-                }
-
-                if (GUILayout.Button("左右", EditorStyles.miniButtonMid))
-                {
-                    ApplyDirectionPreset(TwoDirectionPreset);
-                }
-
-                if (GUILayout.Button("4 方向", EditorStyles.miniButtonMid))
-                {
-                    ApplyDirectionPreset(FourDirectionPreset);
-                }
-
-                if (GUILayout.Button("8 方向", EditorStyles.miniButtonRight))
-                {
-                    ApplyDirectionPreset(EightDirectionPreset);
-                }
-            }
-
-            IReadOnlyList<FlipbookDirectionData> directions = animationAsset.Directions;
-            if (directions.Count == 0)
-            {
-                EditorGUILayout.HelpBox("当前为单方向资产，所有动画使用 StartFrame。", MessageType.None);
-                return;
-            }
-
-            EditorGUILayout.HelpBox(BuildDirectionMappingText(directions), MessageType.Info);
-            using (new EditorGUILayout.HorizontalScope())
-            {
-                _directionFrameStride = Mathf.Max(0, EditorGUILayout.IntField(
-                    new GUIContent("方向帧步长", "相邻方向起始帧的间隔；0 表示使用各动画自己的 FrameCount。"),
-                    _directionFrameStride));
-                if (GUILayout.Button("填充所有动画", GUILayout.Width(100f)))
-                {
-                    FillDirectionStartFrames(animationAsset.AuthoredDirectionCount);
-                }
+                EditorGUILayout.LabelField(
+                    $"共 {animationAsset.TotalFrameCount} 帧 · 单帧 {frameSize.x:0.##} × {frameSize.y:0.##} px",
+                    FlipbookInspectorStyles.Hint);
             }
         }
 
-        private void ApplyDirectionPreset((string Name, float Angle, int Source, bool FlipX)[] preset)
+        private static void DrawPositiveIntField(Rect rect, SerializedProperty property)
         {
-            serializedObject.Update();
-            SerializedProperty directions = serializedObject.FindProperty("_directions");
-            directions.arraySize = preset?.Length ?? 0;
-            for (int i = 0; i < directions.arraySize; i++)
+            EditorGUI.BeginChangeCheck();
+            int value = EditorGUI.IntField(rect, property.intValue);
+            if (EditorGUI.EndChangeCheck())
             {
-                SerializedProperty direction = directions.GetArrayElementAtIndex(i);
-                direction.FindPropertyRelative("Name").stringValue = preset[i].Name;
-                direction.FindPropertyRelative("Angle").floatValue = preset[i].Angle;
-                direction.FindPropertyRelative("SourceDirection").intValue = preset[i].Source;
-                direction.FindPropertyRelative("FlipX").boolValue = preset[i].FlipX;
+                property.intValue = Mathf.Max(1, value);
             }
-
-            serializedObject.ApplyModifiedProperties();
-            _previewDirectionIndex = 0;
         }
 
-        private void FillDirectionStartFrames(int authoredDirectionCount)
+        private void RestartPreview()
         {
-            serializedObject.Update();
-            SerializedProperty clips = serializedObject.FindProperty("_clips");
-            for (int clipIndex = 0; clipIndex < clips.arraySize; clipIndex++)
-            {
-                SerializedProperty clip = clips.GetArrayElementAtIndex(clipIndex);
-                int startFrame = clip.FindPropertyRelative("StartFrame").intValue;
-                int stride = _directionFrameStride > 0
-                    ? _directionFrameStride
-                    : Mathf.Max(1, clip.FindPropertyRelative("FrameCount").intValue);
-                SerializedProperty startFrames = clip.FindPropertyRelative("DirectionStartFrames");
-                startFrames.arraySize = authoredDirectionCount;
-                for (int direction = 0; direction < authoredDirectionCount; direction++)
-                {
-                    startFrames.GetArrayElementAtIndex(direction).intValue = startFrame + direction * stride;
-                }
-            }
-
-            serializedObject.ApplyModifiedProperties();
-        }
-
-        private static string BuildDirectionMappingText(IReadOnlyList<FlipbookDirectionData> directions)
-        {
-            StringBuilder authored = new StringBuilder("DirectionStartFrames 索引：");
-            StringBuilder borrowed = new StringBuilder();
-            int authoredIndex = 0;
-            for (int i = 0; i < directions.Count; i++)
-            {
-                FlipbookDirectionData direction = directions[i];
-                if (direction == null)
-                {
-                    continue;
-                }
-
-                string name = GetDirectionName(direction, i);
-                if (direction.HasOwnFrames)
-                {
-                    authored.Append(authoredIndex == 0 ? " " : "，").Append($"[{authoredIndex}] {name}");
-                    authoredIndex++;
-                    continue;
-                }
-
-                string sourceName = direction.SourceDirection < directions.Count
-                    ? GetDirectionName(directions[direction.SourceDirection], direction.SourceDirection)
-                    : $"#{direction.SourceDirection}";
-                borrowed.Append(borrowed.Length == 0 ? "\n复用：" : "，")
-                    .Append($"{name} ← {sourceName}{(direction.FlipX ? "（翻转）" : string.Empty)}");
-            }
-
-            return authored.Append(borrowed).ToString();
-        }
-
-        private static string GetDirectionName(FlipbookDirectionData direction, int index)
-        {
-            return direction == null || string.IsNullOrEmpty(direction.Name) ? $"#{index}" : direction.Name;
+            _previewStartTime = EditorApplication.timeSinceStartup;
+            Repaint();
         }
 
         public override bool HasPreviewGUI()
@@ -245,12 +178,19 @@ namespace KingdomTD.Flipbook.Editor
                 string[] directionNames = new string[directions.Count];
                 for (int i = 0; i < directionNames.Length; i++)
                 {
-                    directionNames[i] = GetDirectionName(directions[i], i);
+                    FlipbookDirectionData direction = directions[i];
+                    directionNames[i] = direction == null || string.IsNullOrEmpty(direction.Name)
+                        ? $"#{i}"
+                        : direction.Name;
                 }
 
-                _previewDirectionIndex = Mathf.Clamp(_previewDirectionIndex, 0, directionNames.Length - 1);
-                _previewDirectionIndex = EditorGUILayout.Popup(_previewDirectionIndex, directionNames,
-                    GUILayout.Width(60f));
+                int selectedDirection = Mathf.Clamp(_directionSection.SelectedDirection, 0, directionNames.Length - 1);
+                int newDirection = EditorGUILayout.Popup(selectedDirection, directionNames, GUILayout.Width(60f));
+                if (newDirection != _directionSection.SelectedDirection)
+                {
+                    _directionSection.SelectedDirection = newDirection;
+                    Repaint();
+                }
             }
 
             bool previewPlaying = GUILayout.Toggle(_previewPlaying, _previewPlaying ? "暂停" : "播放",
@@ -284,7 +224,8 @@ namespace KingdomTD.Flipbook.Editor
                 localFrame = (int)(elapsed * clip.FrameRate * Mathf.Max(0.0001f, clip.Speed)) % clip.FrameCount;
             }
 
-            int directionIndex = Mathf.Clamp(_previewDirectionIndex, 0, animationAsset.DirectionCount - 1);
+            int directionIndex = Mathf.Clamp(_directionSection.SelectedDirection, 0,
+                animationAsset.DirectionCount - 1);
             FlipbookDirectionResolver.ResolveSource(animationAsset.Directions, directionIndex,
                 out int authoredDirection, out bool flipX);
             Rect uvRect = animationAsset.GetFrameUvRect(clip.GetStartFrame(authoredDirection) + localFrame);
@@ -293,7 +234,7 @@ namespace KingdomTD.Flipbook.Editor
                 uvRect = new Rect(uvRect.xMax, uvRect.y, -uvRect.width, uvRect.height);
             }
 
-            Rect drawArea = GetAspectFittedRect(previewArea, animationAsset.FramePixelSize);
+            Rect drawArea = FlipbookInspectorStyles.FitAspect(previewArea, animationAsset.FramePixelSize);
             EditorGUI.DrawRect(previewArea, new Color(0.12f, 0.12f, 0.12f, 1f));
             GUI.DrawTextureWithTexCoords(drawArea, animationAsset.MainTexture, uvRect, true);
         }
@@ -303,7 +244,7 @@ namespace KingdomTD.Flipbook.Editor
             return _previewPlaying;
         }
 
-        public override Texture2D RenderStaticPreview(string assetPath, Object[] subAssets, int width, int height)
+        public override Texture2D RenderStaticPreview(string assetPath, UnityEngine.Object[] subAssets, int width, int height)
         {
             Texture2D editorIcon = FlipbookEditorIcons.AnimationAssetIcon;
             if (editorIcon == null || width <= 0 || height <= 0)
@@ -346,25 +287,6 @@ namespace KingdomTD.Flipbook.Editor
                 EditorUtility.SetDirty(animationAsset.WorldMaterial);
                 SceneView.RepaintAll();
             }
-        }
-
-        private static Rect GetAspectFittedRect(Rect area, Vector2 frameSize)
-        {
-            if (frameSize.x <= 0f || frameSize.y <= 0f)
-            {
-                return area;
-            }
-
-            float frameAspect = frameSize.x / frameSize.y;
-            float areaAspect = area.width / area.height;
-            if (areaAspect > frameAspect)
-            {
-                float width = area.height * frameAspect;
-                return new Rect(area.x + (area.width - width) * 0.5f, area.y, width, area.height);
-            }
-
-            float height = area.width / frameAspect;
-            return new Rect(area.x, area.y + (area.height - height) * 0.5f, area.width, height);
         }
     }
 }

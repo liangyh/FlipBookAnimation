@@ -53,7 +53,7 @@ namespace KingdomTD.Flipbook.Tests
 
             List<string> errors = _asset.GetValidationErrors();
 
-            Assert.IsTrue(errors.Exists(error => error.Contains("DirectionStartFrames[1]")));
+            Assert.IsTrue(errors.Exists(error => error.Contains("D1 方向帧范围")));
         }
 
         [Test]
