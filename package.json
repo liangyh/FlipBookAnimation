@@ -16,7 +16,7 @@
   "samples": [
     {
       "displayName": "Flipbook Basic",
-      "description": "A single scene demonstrating both FlipbookRenderer and FlipbookGraphic with shared animation assets.",
+      "description": "A comparison of World and UGUI rendering, plus a ground shadow test scene with adjustable character count.",
       "path": "Samples~/01-Flipbook-Basic"
     }
   ],

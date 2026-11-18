@@ -78,6 +78,8 @@ flipbook.Play("Walk", forceRestart: false);
 
 使用 `Pause()`、`Resume()`、`Stop()` 控制播放；`SetTimeMode(FlipbookTimeMode.Unscaled)` 可改用非缩放时间。`SetEffectChangeRate()` 可混合资源材质中的可选 **Effect Texture**。
 
+在角色预制体的 **Flipbook Renderer** 上勾选 **Ground Shadow Enabled**，当前帧的轮廓就会以不透明纯色投到水平地面。默认地面为世界 `Y = 0`，影子朝屏幕右上方。给场景对象添加 **KingdomTD > Flipbook Ground Shadow Settings** 可统一调整颜色、方向、长度和地面高度。
+
 ## 在 UGUI 中使用
 
 在 Canvas 下添加 **UI (Canvas) > Flipbook Graphic**，将动画资源赋给 **Animation Asset**。它继承 `MaskableGraphic`，可直接使用颜色、Mask、RectMask2D 与 Raycast，不需要 `Image` 或 `RawImage`。
@@ -96,6 +98,8 @@ void OnEnable()
 ## 导入示例
 
 在 Package Manager 中选择 **KingdomTD Flipbook**，展开 **Samples** 后导入 **Flipbook Basic**。打开 `FlipbookBasic.unity` 进入 Play 模式，即可同时查看 `FlipbookRenderer` 和 `FlipbookGraphic`；样例资源独立于本地开发沙盒，可安全复制到业务项目。
+
+同一个示例还包含 `FlipbookGroundShadowTest.unity`。Play 模式中可以定格查看单角色的阴影轮廓，也可以调整同屏数量并对照阴影开关前后的帧耗时。[阴影测试场景用法](Samples~/01-Flipbook-Basic/README.md#地面阴影测试)
 
 ## 注意事项
 

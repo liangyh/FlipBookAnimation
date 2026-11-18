@@ -8,6 +8,9 @@ Shader "KingdomTD/Flipbook/World"
         _Rows ("Rows", Float) = 1
         _CurrentFrame ("Current Frame", Float) = 0
         [HideInInspector] _FlipX ("Flip X", Float) = 0
+        [HideInInspector] _FlipbookGroundFoot ("Ground Shadow Foot", Float) = 0
+        [HideInInspector] _FlipbookGroundProjection ("Ground Shadow Projection", Vector) = (0.001, 0.7, 0.70710678, 0.70710678)
+        [HideInInspector] _FlipbookGroundColor ("Ground Shadow Color", Color) = (0.18, 0.17, 0.2, 1)
         [HDR] _ChangeColor ("Change Color", Color) = (1, 1, 1, 1)
         _ChangeRate ("Change Rate", Range(0, 1)) = 0
         _EffectChangeRate ("Effect Rate", Range(0, 1)) = 0
@@ -22,6 +25,8 @@ Shader "KingdomTD/Flipbook/World"
             "RenderType" = "TransparentCutout"
             "RenderPipeline" = "UniversalPipeline"
             "PreviewType" = "Plane"
+            // Dynamic batching would bake away the object-space foot and scale.
+            "DisableBatching" = "True"
         }
 
         Pass
@@ -55,6 +60,9 @@ Shader "KingdomTD/Flipbook/World"
                 UNITY_DEFINE_INSTANCED_PROP(float, _Columns)
                 UNITY_DEFINE_INSTANCED_PROP(float, _Rows)
                 UNITY_DEFINE_INSTANCED_PROP(float, _FlipX)
+                UNITY_DEFINE_INSTANCED_PROP(float, _FlipbookGroundFoot)
+                UNITY_DEFINE_INSTANCED_PROP(float4, _FlipbookGroundProjection)
+                UNITY_DEFINE_INSTANCED_PROP(half4, _FlipbookGroundColor)
                 UNITY_DEFINE_INSTANCED_PROP(half4, _ChangeColor)
                 UNITY_DEFINE_INSTANCED_PROP(half, _ChangeRate)
                 UNITY_DEFINE_INSTANCED_PROP(half, _EffectChangeRate)
@@ -63,7 +71,7 @@ Shader "KingdomTD/Flipbook/World"
             struct Attributes
             {
                 float3 positionOS : POSITION;
-                float2 uv : TEXCOORD0;
+                float3 uv : TEXCOORD0;
                 UNITY_VERTEX_INPUT_INSTANCE_ID
             };
 
@@ -82,6 +90,28 @@ Shader "KingdomTD/Flipbook/World"
                 return (uv + float2(column, rows - 1.0 - row)) / float2(columns, rows);
             }
 
+            float3 GroundShadowPosition(float2 corner, float footHeight, float4 projection)
+            {
+                float3 foot = TransformObjectToWorld(float3(0.0, footHeight - 0.5, 0.0));
+                foot.y = projection.x;
+                float3 screenAxis = UNITY_MATRIX_V[0].xyz * projection.z + UNITY_MATRIX_V[1].xyz * projection.w;
+                float3 ray = IsPerspectiveProjection() ? foot - GetCameraPositionWS() : GetViewForwardDir();
+                // Intersect the view plane through the foot with the ground to get the requested screen direction.
+                float2 axis = ray.xz * screenAxis.y - screenAxis.xz * ray.y;
+                float orientation = ray.y > 0.0 ? -1.0 : 1.0;
+                float2 direction = axis * (orientation * rsqrt(max(dot(axis, axis), 1e-12)));
+                // Rotate the width with the footprint so a horizontal heading still has area.
+                float2 right = float2(direction.y, -direction.x) * orientation;
+
+                float3 localX = TransformObjectToWorldDir(float3(1, 0, 0), false);
+                float3 localY = TransformObjectToWorldDir(float3(0, 1, 0), false);
+                float width = length(localX) * (dot(localX, UNITY_MATRIX_V[0].xyz) < 0.0 ? -1.0 : 1.0);
+                float height = length(localY) * (dot(localY, UNITY_MATRIX_V[1].xyz) < 0.0 ? -1.0 : 1.0);
+                foot.xz += right * ((corner.x - 0.5) * width);
+                foot.xz += direction * ((corner.y - footHeight) * height * projection.y);
+                return foot;
+            }
+
             Varyings vert(Attributes input)
             {
                 Varyings output;
@@ -92,14 +122,27 @@ Shader "KingdomTD/Flipbook/World"
                 float rows = UNITY_ACCESS_INSTANCED_PROP(FlipbookPerInstance, _Rows);
                 float flipX = UNITY_ACCESS_INSTANCED_PROP(FlipbookPerInstance, _FlipX);
 
-                float2 uv = input.uv;
+                float2 uv = input.uv.xy;
                 uv.x = lerp(uv.x, 1.0 - uv.x, step(0.5, flipX));
 
-                output.positionCS = TransformObjectToHClip(input.positionOS);
                 output.uv = GetFrameUV(TRANSFORM_TEX(uv, _MainTex), currentFrame, columns, rows);
-                output.changeColor = UNITY_ACCESS_INSTANCED_PROP(FlipbookPerInstance, _ChangeColor);
-                output.rates.x = UNITY_ACCESS_INSTANCED_PROP(FlipbookPerInstance, _ChangeRate);
-                output.rates.y = UNITY_ACCESS_INSTANCED_PROP(FlipbookPerInstance, _EffectChangeRate);
+                if (input.uv.z > 0.5)
+                {
+                    float footHeight = UNITY_ACCESS_INSTANCED_PROP(FlipbookPerInstance, _FlipbookGroundFoot);
+                    float4 projection = UNITY_ACCESS_INSTANCED_PROP(FlipbookPerInstance, _FlipbookGroundProjection);
+                    half3 shadowColor = UNITY_ACCESS_INSTANCED_PROP(FlipbookPerInstance, _FlipbookGroundColor).rgb;
+                    output.positionCS = TransformWorldToHClip(GroundShadowPosition(input.uv.xy, footHeight, projection));
+                    output.changeColor = half4(shadowColor, 1.0h);
+                    output.rates = half2(1.0h, 0.0h);
+                }
+                else
+                {
+                    output.positionCS = TransformObjectToHClip(input.positionOS);
+                    output.changeColor = UNITY_ACCESS_INSTANCED_PROP(FlipbookPerInstance, _ChangeColor);
+                    output.changeColor.a = 0.0h;
+                    output.rates.x = UNITY_ACCESS_INSTANCED_PROP(FlipbookPerInstance, _ChangeRate);
+                    output.rates.y = UNITY_ACCESS_INSTANCED_PROP(FlipbookPerInstance, _EffectChangeRate);
+                }
                 return output;
             }
 
@@ -114,6 +157,7 @@ Shader "KingdomTD/Flipbook/World"
 
                 color.rgb = lerp(color.rgb, input.changeColor.rgb, input.rates.x);
                 clip(color.a - _Cutoff);
+                color.a = max(color.a, input.changeColor.a);
                 return color;
             }
             ENDHLSL

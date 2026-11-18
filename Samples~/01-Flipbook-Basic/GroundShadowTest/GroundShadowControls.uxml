@@ -1,0 +1,26 @@
+<ui:UXML xmlns:ui="UnityEngine.UIElements">
+    <Style src="GroundShadowControls.uss" />
+    <ui:VisualElement class="controls">
+        <ui:VisualElement class="row toolbar">
+            <ui:Label text="Ground Shadow Test" class="title" />
+            <ui:VisualElement class="row count-controls">
+                <ui:Label text="Characters" class="count-label" />
+                <ui:IntegerField name="count" value="1" class="count" />
+                <ui:Button name="apply" text="Apply" class="apply" />
+            </ui:VisualElement>
+            <ui:VisualElement class="row presets">
+                <ui:Button name="detail" text="1" />
+                <ui:Button name="stress-1000" text="1,000" />
+                <ui:Button name="stress-2000" text="2,000" />
+            </ui:VisualElement>
+            <ui:VisualElement class="row toggles">
+                <ui:Toggle name="shadows" label="Ground shadows" value="true" />
+                <ui:Button name="pause" text="Pause" />
+            </ui:VisualElement>
+        </ui:VisualElement>
+        <ui:VisualElement class="row metrics">
+            <ui:Label name="frame-rate" class="frame-rate" />
+            <ui:Label name="render-stats" class="render-stats" />
+        </ui:VisualElement>
+    </ui:VisualElement>
+</ui:UXML>

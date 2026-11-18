@@ -20,6 +20,8 @@ namespace KingdomTD.Flipbook.Editor
         private SerializedProperty _rotateParentForBillboard;
         private SerializedProperty _faceCamera;
         private SerializedProperty _useCameraForward;
+        private SerializedProperty _groundShadowEnabled;
+        private SerializedProperty _groundShadowFootHeight;
         private SerializedProperty _frameEvent;
         private SerializedProperty _animationCompleted;
 
@@ -38,6 +40,8 @@ namespace KingdomTD.Flipbook.Editor
             _rotateParentForBillboard = serializedObject.FindProperty("_rotateParentForBillboard");
             _faceCamera = serializedObject.FindProperty("_faceCamera");
             _useCameraForward = serializedObject.FindProperty("_useCameraForward");
+            _groundShadowEnabled = serializedObject.FindProperty("_groundShadowEnabled");
+            _groundShadowFootHeight = serializedObject.FindProperty("_groundShadowFootHeight");
             _frameEvent = serializedObject.FindProperty("_frameEvent");
             _animationCompleted = serializedObject.FindProperty("_animationCompleted");
         }
@@ -81,6 +85,14 @@ namespace KingdomTD.Flipbook.Editor
                 {
                     EditorGUILayout.PropertyField(_useCameraForward);
                     EditorGUILayout.PropertyField(_rotateParentForBillboard);
+                }
+            }
+            EditorGUILayout.PropertyField(_groundShadowEnabled);
+            if (_groundShadowEnabled.boolValue || _groundShadowEnabled.hasMultipleDifferentValues)
+            {
+                using (new EditorGUI.IndentLevelScope())
+                {
+                    EditorGUILayout.PropertyField(_groundShadowFootHeight);
                 }
             }
             EditorGUILayout.PropertyField(_frameEvent);

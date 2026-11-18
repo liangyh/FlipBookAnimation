@@ -99,6 +99,27 @@ renderer.SetTimeMode(FlipbookTimeMode.Scaled);
 `forceRestart` 默认为 `true`，保持每次调用 `Play` 都重新播放的兼容行为；传入 `false` 时，若同一动画仍在播放，则保留当前进度，仅更新循环状态和速度并解除暂停。动画已经停止、播放完成或发生切换时仍会重新播放。
 组件 Inspector 的 `Animation` 下拉框会列出资产中的全部动画；编辑态切换时保存默认动画并显示首帧。Play Mode 下拉框只更新当前播放状态，不修改序列化配置或触发资源重建；打开和关闭 Unity 原生下拉菜单时产生的 EditorLoop 停顿不属于运行时开销。
 
+### 纯色地面阴影
+
+在角色预制体的 `FlipbookRenderer` 上勾选 **Ground Shadow Enabled**。内置 World 材质会将当前帧的主纹理 Alpha 按材质的 **Alpha Cutoff** 裁成不透明轮廓，动作、朝向和水平镜像都随角色变化。适用于连续的水平地面。角色离地时影子留在设定的世界高度，地面前方的不透明物体通过深度测试遮挡影子。
+
+**Ground Shadow Foot Height** 是脚底距离帧底的比例，默认值为 0。例如 200 像素高的帧在脚下留了 14 像素透明边，可填 `0.07`。在正交或透视的俯视镜头中调整脚底位置最直观。
+
+场景可添加一个 **KingdomTD > Flipbook Ground Shadow Settings** 统一调整投影。缺省使用不透明深灰色、屏幕角度 45°、长度 0.7、世界地面高度 0。角度从屏幕右方向上逆时针计算，阴影的宽度沿地面垂直于投影方向，长度表示一整帧的角色高度对应多少地面距离。普通场景共用最后启用的设置，禁用后恢复上一份或缺省设置。Prefab Mode 的预览使用所在 Prefab Stage 的设置，缺省时使用默认值。
+
+```csharp
+renderer.GroundShadowFootHeight = 0.07f;
+renderer.GroundShadowEnabled = true;
+shadowSettings.ScreenAngle = 120f;
+shadowSettings.Length = 0.85f;
+shadowSettings.GroundHeight = 2f;
+shadowSettings.ShadowColor = new Color(0.18f, 0.17f, 0.2f);
+```
+
+使用阴影的角色共享一个八顶点网格，角色与影子在同一子网格、同一材质、同一 Pass 中绘制。关闭时使用四顶点网格。内置 World Shader 保留每个对象的变换矩阵，可在共享材质上启用 **Enable GPU Instancing** 合并同类角色的绘制。切换阴影沿用当前材质，使用不支持阴影的旧材质时显示原四顶点角色。
+
+阴影每个片元只采一次原图集，透明留白与近景大面积重叠仍有像素成本。测量时使用相同分辨率、镜头、动作与角色布局，对照开关前后的 GPU 帧耗时，并用 Frame Debugger 检查同材质实例的批次。
+
 ## UGUI 渲染
 
 在 Canvas 下直接添加 `FlipbookGraphic`，不需要同时添加 `Image` 或 `RawImage`。它继承 `MaskableGraphic`，自己生成四顶点网格和当前帧 UV，可直接使用 `Mask`、`RectMask2D`、颜色、Raycast 和 `SetNativeSize`。
@@ -124,8 +145,10 @@ Package 不依赖 Addressables、Resources 或项目业务程序集，也不提�
 
 1. 创建使用 `KingdomTD/Flipbook/World` Shader 的 Material。
 2. 将资产的 `Main Texture` 同时设置到 Material 的 `_MainTex`。
-3. 需要效果纹理时设置 `_EffectTex`，并通过 `SetEffectChangeRate` 控制混合。
-4. 需要角色染色时通过 `SetChangeColor` 和 `SetChangeRate` 设置实例参数。
+3. 需要效果纹理时设置 **Effect Texture**，用 **Effect Rate** 调整混合比例。
+4. 需要角色染色时设置 **Change Color** 和 **Change Rate**。
+
+`FlipbookRenderer` 默认沿用材质上的这三个参数。在 Play Mode 修改材质时，共用它的角色会实时更新。脚本调用 `SetEffectChangeRate`、`SetChangeColor` 或 `SetChangeRate` 时，只覆盖对应角色的那一个参数。
 ## 示例
 
 通过 Package Manager 导入 **Flipbook Basic** 示例。打开其场景即可同时验证 `FlipbookRenderer` 与 `FlipbookGraphic`；两种组件共享同一动画资源，World 渲染额外使用样例材质。

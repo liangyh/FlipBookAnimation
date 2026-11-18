@@ -1,9 +1,14 @@
 using System;
+#if UNITY_EDITOR
+using System.Collections.Concurrent;
+using System.Threading;
+#endif
 using UnityEngine;
 using UnityEngine.Events;
 
 namespace KingdomTD.Flipbook
 {
+    [ExecuteAlways]
     [DisallowMultipleComponent]
     [RequireComponent(typeof(MeshFilter), typeof(MeshRenderer))]
     [AddComponentMenu("KingdomTD/Flipbook Renderer")]
@@ -34,6 +39,11 @@ namespace KingdomTD.Flipbook
         [SerializeField] private bool _rotateParentForBillboard = true;
         [SerializeField] private bool _useCameraForward = true;
 
+        [Header("Ground Shadow")]
+        [SerializeField] private bool _groundShadowEnabled;
+        [Tooltip("脚底在单帧内的归一化高度。底边为 0，顶边为 1。")]
+        [Range(0f, 1f)] [SerializeField] private float _groundShadowFootHeight;
+
         [Header("Events")]
         [SerializeField] private UnityEvent<string> _frameEvent = new UnityEvent<string>();
         [SerializeField] private UnityEvent<string> _animationCompleted = new UnityEvent<string>();
@@ -45,6 +55,12 @@ namespace KingdomTD.Flipbook
         private static readonly int ChangeColorId = Shader.PropertyToID("_ChangeColor");
         private static readonly int ChangeRateId = Shader.PropertyToID("_ChangeRate");
         private static readonly int EffectChangeRateId = Shader.PropertyToID("_EffectChangeRate");
+        private static readonly int GroundFootId = Shader.PropertyToID("_FlipbookGroundFoot");
+        private static readonly int GroundProjectionId = Shader.PropertyToID("_FlipbookGroundProjection");
+        private static readonly int GroundColorId = Shader.PropertyToID("_FlipbookGroundColor");
+#if UNITY_EDITOR
+        private static readonly ConcurrentQueue<FlipbookRenderer> PendingValidations = new ConcurrentQueue<FlipbookRenderer>();
+#endif
 
         private static int _cachedCameraFrame = -1;
         private static Camera _cachedCamera;
@@ -57,6 +73,16 @@ namespace KingdomTD.Flipbook
         private bool _isReady;
         private bool _hasFacingAngle;
         private float _facingAngle;
+        private bool _usingGroundShadow;
+        private FlipbookGroundShadowBounds _groundShadowBounds;
+        private Vector4 _groundShadowProjection;
+        private Color _groundShadowColor;
+#if UNITY_EDITOR
+        private FlipbookAnimationAsset _boundAsset;
+        private Material _boundAssetMaterial;
+        private bool _hasBoundMaterial;
+        private int _validationQueued;
+#endif
 
         public event Action<string> FrameEvent;
         public event Action<string> AnimationCompleted;
@@ -73,20 +99,65 @@ namespace KingdomTD.Flipbook
         public bool IsFlippedX => _playback.FlipX;
         public float FacingAngle => _hasFacingAngle ? _facingAngle : _initialFacingAngle;
 
+        public bool GroundShadowEnabled
+        {
+            get => _groundShadowEnabled;
+            set
+            {
+                if (_groundShadowEnabled == value)
+                {
+                    return;
+                }
+
+                _groundShadowEnabled = value;
+                SynchronizeShadowMesh();
+            }
+        }
+
+        public float GroundShadowFootHeight
+        {
+            get => _groundShadowFootHeight;
+            set
+            {
+                float footHeight = Mathf.Clamp01(value);
+                if (_groundShadowFootHeight == footHeight)
+                {
+                    return;
+                }
+
+                _groundShadowFootHeight = footHeight;
+                if (_usingGroundShadow)
+                {
+                    UpdateGroundShadow(true);
+                }
+            }
+        }
+
         private void Reset()
         {
-            SynchronizeRendererResources();
+            BindAnimationMaterial();
+            SynchronizeShadowMesh();
         }
 
         private void Awake()
         {
-            SynchronizeRendererResources();
             AttachPlaybackCallbacks();
         }
 
         private void OnEnable()
         {
-            if (!Initialize())
+#if UNITY_EDITOR
+            if (!Application.IsPlaying(gameObject))
+            {
+                RefreshInspectorSettings();
+                return;
+            }
+#endif
+            if (_isReady)
+            {
+                SynchronizeShadowMesh();
+            }
+            else if (!Initialize())
             {
                 return;
             }
@@ -100,10 +171,20 @@ namespace KingdomTD.Flipbook
         private void OnDisable()
         {
             _playback.Pause();
+            if (_usingGroundShadow)
+            {
+                ReleaseGroundShadow();
+            }
         }
 
         private void Update()
         {
+#if UNITY_EDITOR
+            if (!Application.IsPlaying(gameObject))
+            {
+                return;
+            }
+#endif
             if (!_isReady)
             {
                 return;
@@ -115,10 +196,18 @@ namespace KingdomTD.Flipbook
 
         private void LateUpdate()
         {
+#if UNITY_EDITOR
+            if (_isReady && Application.IsPlaying(gameObject))
+#else
             if (_isReady)
+#endif
             {
                 RestoreRequiredPropertiesIfNeeded();
                 ApplyBillboard();
+            }
+            if (_usingGroundShadow)
+            {
+                UpdateGroundShadow();
             }
         }
 
@@ -129,7 +218,8 @@ namespace KingdomTD.Flipbook
                 return true;
             }
 
-            SynchronizeRendererResources();
+            BindAnimationMaterial();
+            SynchronizeShadowMesh();
             AttachPlaybackCallbacks();
             if (_animationAsset == null || _meshFilter == null || _meshRenderer == null)
             {
@@ -321,18 +411,92 @@ namespace KingdomTD.Flipbook
             _meshRenderer ??= GetComponent<MeshRenderer>();
         }
 
-        private void SynchronizeRendererResources()
+        private void BindAnimationMaterial()
         {
             EnsureComponents();
+            if (_meshRenderer == null)
+            {
+                return;
+            }
+
+            Material material = _animationAsset != null ? _animationAsset.WorldMaterial : null;
+            if (_meshRenderer.sharedMaterial != material)
+            {
+                _meshRenderer.sharedMaterial = material;
+            }
+#if UNITY_EDITOR
+            _hasBoundMaterial = true;
+            _boundAsset = _animationAsset;
+            _boundAssetMaterial = material;
+#endif
+        }
+
+        private void SynchronizeShadowMesh()
+        {
+            EnsureComponents();
+            if (_meshFilter == null || _meshRenderer == null)
+            {
+                return;
+            }
+
+            Material material = _meshRenderer.sharedMaterial;
+            bool withShadow = isActiveAndEnabled && _groundShadowEnabled &&
+                              material != null && material.HasProperty(GroundFootId);
+            if (!withShadow && _usingGroundShadow)
+            {
+                ReleaseGroundShadow();
+                return;
+            }
+
+            Mesh mesh = FlipbookQuadMesh.Get(withShadow);
+            if (_meshFilter.sharedMesh != mesh)
+            {
+                _meshFilter.sharedMesh = mesh;
+            }
+
+            if (withShadow)
+            {
+                _usingGroundShadow = true;
+                UpdateGroundShadow(true);
+            }
+        }
+
+        private void ReleaseGroundShadow()
+        {
+            _usingGroundShadow = false;
             if (_meshFilter != null)
             {
                 _meshFilter.sharedMesh = FlipbookQuadMesh.Get();
             }
-
             if (_meshRenderer != null)
             {
-                _meshRenderer.sharedMaterial = _animationAsset != null ? _animationAsset.WorldMaterial : null;
+                _groundShadowBounds.Reset(_meshRenderer);
             }
+        }
+
+        private void UpdateGroundShadow(bool force = false)
+        {
+            FlipbookGroundShadowSettings.GetProjection(gameObject, out Vector4 projection, out Color color);
+            if (force || !_groundShadowProjection.Equals(projection) || !_groundShadowColor.Equals(color))
+            {
+                _groundShadowProjection = projection;
+                _groundShadowColor = color;
+                if (_propertyBlock == null)
+                {
+                    _propertyBlock = new MaterialPropertyBlock();
+                    _meshRenderer.GetPropertyBlock(_propertyBlock);
+                }
+                SetGroundShadowProperties();
+                ApplyPropertyBlock();
+            }
+            _groundShadowBounds.Update(_meshRenderer, _groundShadowFootHeight, projection.x, projection.y, force);
+        }
+
+        private void SetGroundShadowProperties()
+        {
+            _propertyBlock.SetFloat(GroundFootId, _groundShadowFootHeight);
+            _propertyBlock.SetVector(GroundProjectionId, _groundShadowProjection);
+            _propertyBlock.SetColor(GroundColorId, _groundShadowColor);
         }
 
         private void AttachPlaybackCallbacks()
@@ -359,13 +523,15 @@ namespace KingdomTD.Flipbook
         private void ResetPresentation()
         {
             _propertyBlock.Clear();
-            _propertyBlock.SetColor(ChangeColorId, Color.white);
-            _propertyBlock.SetFloat(ChangeRateId, 0f);
-            _propertyBlock.SetFloat(EffectChangeRateId, 0f);
+            // Tint and effect parameters use the material until explicitly overridden.
             _propertyBlock.SetFloat(CurrentFrameId, 0f);
             _propertyBlock.SetFloat(FlipXId, 0f);
             _propertyBlock.SetFloat(ColumnsId, _animationAsset.Columns);
             _propertyBlock.SetFloat(RowsId, _animationAsset.Rows);
+            if (_usingGroundShadow)
+            {
+                SetGroundShadowProperties();
+            }
             ApplyPropertyBlock();
         }
 
@@ -402,6 +568,10 @@ namespace KingdomTD.Flipbook
             _propertyBlock.SetFloat(FlipXId, _playback.FlipX ? 1f : 0f);
             _propertyBlock.SetFloat(ColumnsId, _animationAsset.Columns);
             _propertyBlock.SetFloat(RowsId, _animationAsset.Rows);
+            if (_usingGroundShadow)
+            {
+                SetGroundShadowProperties();
+            }
             ApplyPropertyBlock();
         }
 
@@ -464,7 +634,46 @@ namespace KingdomTD.Flipbook
 #if UNITY_EDITOR
         private void OnValidate()
         {
-            SynchronizeRendererResources();
+            // OnValidate may run on a loading thread, including for disabled components.
+            if (Interlocked.Exchange(ref _validationQueued, 1) == 0)
+            {
+                PendingValidations.Enqueue(this);
+            }
+        }
+
+        internal static void ApplyPendingValidations()
+        {
+            while (PendingValidations.TryDequeue(out FlipbookRenderer renderer))
+            {
+                Interlocked.Exchange(ref renderer._validationQueued, 0);
+                if (renderer != null)
+                {
+                    renderer.RefreshInspectorSettings();
+                }
+            }
+        }
+
+        private void RefreshInspectorSettings()
+        {
+            Material assetMaterial = _animationAsset != null ? _animationAsset.WorldMaterial : null;
+            bool assetChanged = !_hasBoundMaterial || _boundAsset != _animationAsset || _boundAssetMaterial != assetMaterial;
+            if (assetChanged && _isReady)
+            {
+                Deinitialize();
+                if (Initialize() && Application.IsPlaying(gameObject) && isActiveAndEnabled && _playOnEnable)
+                {
+                    Play(ResolveDefaultAnimationName(), _loop, _speed);
+                }
+            }
+            else
+            {
+                if (assetChanged)
+                {
+                    BindAnimationMaterial();
+                }
+                SynchronizeShadowMesh();
+            }
+
             if (_isReady && !_hasFacingAngle)
             {
                 _playback.SetFacingAngle(_initialFacingAngle);
