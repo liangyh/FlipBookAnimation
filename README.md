@@ -17,7 +17,7 @@
 在目标 Unity 项目中打开 **Window > Package Manager**，点击左上角 **+**，选择 **Add package from git URL...**，填入：
 
 ```text
-https://github.com/liangyh/FlipBookAnimation.git#v1.0.2
+https://github.com/liangyh/FlipBookAnimation.git#v1.0.3
 ```
 
 也可以直接编辑项目的 `Packages/manifest.json`：
@@ -25,12 +25,12 @@ https://github.com/liangyh/FlipBookAnimation.git#v1.0.2
 ```json
 {
   "dependencies": {
-    "com.kingdomtd.flipbook": "https://github.com/liangyh/FlipBookAnimation.git#v1.0.2"
+    "com.kingdomtd.flipbook": "https://github.com/liangyh/FlipBookAnimation.git#v1.0.3"
   }
 }
 ```
 
-安装后，确认 Package Manager 中出现 **KingdomTD Flipbook**。发布新版本后，将 URL 末尾的标签改为对应的 `#vX.Y.Z`（例如 `#v1.0.3`）即可升级；Git 依赖不会自动发现新标签。
+安装后，确认 Package Manager 中出现 **KingdomTD Flipbook**。升级时把 URL 末尾的标签改成目标版本（例如从 `#v1.0.2` 改成 `#v1.0.3`）。Git 依赖不会自动发现新标签。
 
 ## 创建动画资源
 
