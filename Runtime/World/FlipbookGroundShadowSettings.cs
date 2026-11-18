@@ -61,8 +61,10 @@ namespace KingdomTD.Flipbook
             if (settings._cachedScreenAngle != settings._screenAngle)
             {
                 settings._cachedScreenAngle = settings._screenAngle;
-                float angle = settings._screenAngle * Mathf.Deg2Rad;
-                settings._screenDirection = new Vector2(Mathf.Cos(angle), Mathf.Sin(angle));
+                float angle = Mathf.Repeat(settings._screenAngle, 360f);
+                float radians = angle * Mathf.Deg2Rad;
+                float vertical = angle == 0f || angle == 180f ? 0f : Mathf.Sin(radians);
+                settings._screenDirection = new Vector2(Mathf.Cos(radians), vertical);
             }
 
             Vector2 direction = settings._screenDirection;

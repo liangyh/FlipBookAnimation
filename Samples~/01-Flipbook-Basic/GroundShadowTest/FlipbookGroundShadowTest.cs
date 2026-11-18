@@ -198,8 +198,7 @@ namespace KingdomTD.Flipbook.Samples
             Vector2 heading = new Vector2(Mathf.Cos(angle), Mathf.Sin(angle));
             Vector2 groundDirection = new Vector2(heading.x, heading.y / pitch).normalized;
             Vector2 projectedShadow = new Vector2(groundDirection.x, groundDirection.y * pitch) * (_framing.z * height);
-            Vector2 shadowHalfWidth = new Vector2(Mathf.Abs(groundDirection.y), Mathf.Abs(groundDirection.x) * pitch) *
-                                      (width * 0.5f);
+            Vector2 shadowHalfWidth = Vector2.right * (width * 0.5f);
             Vector2 shadowStart = projectedShadow * -footHeight;
             Vector2 shadowEnd = projectedShadow * (1f - footHeight);
             Vector2 min = Vector2.Min(new Vector2(-width * 0.5f, -height * footHeight),

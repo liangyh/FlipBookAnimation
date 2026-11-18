@@ -105,7 +105,7 @@ renderer.SetTimeMode(FlipbookTimeMode.Scaled);
 
 **Ground Shadow Foot Height** 是脚底距离帧底的比例，默认值为 0。例如 200 像素高的帧在脚下留了 14 像素透明边，可填 `0.07`。在正交或透视的俯视镜头中调整脚底位置最直观。
 
-场景可添加一个 **KingdomTD > Flipbook Ground Shadow Settings** 统一调整投影。缺省使用不透明深灰色、屏幕角度 45°、长度 0.7、世界地面高度 0。角度从屏幕右方向上逆时针计算，阴影的宽度沿地面垂直于投影方向，长度表示一整帧的角色高度对应多少地面距离。普通场景共用最后启用的设置，禁用后恢复上一份或缺省设置。Prefab Mode 的预览使用所在 Prefab Stage 的设置，缺省时使用默认值。
+场景可添加一个 **KingdomTD > Flipbook Ground Shadow Settings** 统一调整投影。缺省使用不透明深灰色、屏幕角度 45°、长度 0.7、世界地面高度 0。角度从屏幕右方向上逆时针计算，长度表示一整帧的角色高度对应多少地面距离。阴影脚底一行沿屏幕横向与角色对齐。0° 和 180° 时投影沿这条线展开，轮廓面积为零。普通场景共用最后启用的设置，禁用后恢复上一份或缺省设置。Prefab Mode 的预览使用所在 Prefab Stage 的设置，缺省时使用默认值。
 
 ```csharp
 renderer.GroundShadowFootHeight = 0.07f;

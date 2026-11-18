@@ -345,6 +345,7 @@ namespace KingdomTD.Flipbook.Tests
         }
 
         [TestCase(true, -2f, 0f, 45f)]
+        [TestCase(true, -2f, 0f, 28f)]
         [TestCase(true, -5.8f, 0f, 20f)]
         [TestCase(false, -2f, 0f, 60f)]
         [TestCase(false, 2f, 0f, 60f)]
@@ -392,6 +393,14 @@ namespace KingdomTD.Flipbook.Tests
                 GameObject floor = CreateScenery(PrimitiveType.Plane, scenery);
                 floor.transform.position = Vector3.up * _settings.GroundHeight;
                 floor.transform.localScale = Vector3.one * 4f;
+                if (screenAngle == 0f || screenAngle == 180f)
+                {
+                    ReadCameraPixels(camera, pixels);
+                    Assert.IsFalse(System.Array.Exists(pixels.GetPixels32(), pixel => IsShadow(pixel)),
+                        "A horizontal projection has no filled area.");
+                    return;
+                }
+
                 if (onlyShadowInView)
                 {
                     Vector3 bodyRight = _renderer.transform.TransformPoint(Vector3.right * 0.5f);
@@ -402,12 +411,18 @@ namespace KingdomTD.Flipbook.Tests
                 float angle = _settings.ScreenAngle * Mathf.Deg2Rad;
                 Vector2 heading = new Vector2(Mathf.Cos(angle), Mathf.Sin(angle));
                 Vector3 direction = GroundDirection(camera, foot, heading);
-                Vector3 width = Vector3.Cross(Vector3.up, direction) * 1.8f;
+                Vector3 quarterWidth = GroundDirection(camera, foot, Vector2.right) * (1.8f * 0.25f);
                 Vector3 middle = foot + direction * (2f * 0.55f * _settings.Length);
-                Vector3 leftOnGround = middle - width * 0.25f;
+                Vector3 leftOnGround = middle - quarterWidth;
                 Vector3 left = camera.WorldToScreenPoint(leftOnGround);
-                Vector3 right = camera.WorldToScreenPoint(middle + width * 0.25f);
+                Vector3 right = camera.WorldToScreenPoint(middle + quarterWidth);
                 _renderer.SetDirection(0);
+                if (!onlyShadowInView)
+                {
+                    Vector3 leftFoot = camera.WorldToScreenPoint(foot - quarterWidth);
+                    Vector3 rightFoot = camera.WorldToScreenPoint(foot + quarterWidth);
+                    AssertShadowPixels(camera, pixels, leftFoot, rightFoot, true, false);
+                }
                 AssertShadowPixels(camera, pixels, left, right, true, false);
                 _renderer.SetNormalizedTime(1f);
                 AssertShadowPixels(camera, pixels, left, right, false, true);

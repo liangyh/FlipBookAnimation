@@ -90,18 +90,24 @@ Shader "KingdomTD/Flipbook/World"
                 return (uv + float2(column, rows - 1.0 - row)) / float2(columns, rows);
             }
 
+            float2 ProjectGroundAxis(float3 ray, float3 screenAxis, float orientation)
+            {
+                // Intersect the view plane through the foot with the ground.
+                float2 axis = ray.xz * screenAxis.y - screenAxis.xz * ray.y;
+                return axis * (orientation * rsqrt(max(dot(axis, axis), 1e-12)));
+            }
+
             float3 GroundShadowPosition(float2 corner, float footHeight, float4 projection)
             {
                 float3 foot = TransformObjectToWorld(float3(0.0, footHeight - 0.5, 0.0));
                 foot.y = projection.x;
-                float3 screenAxis = UNITY_MATRIX_V[0].xyz * projection.z + UNITY_MATRIX_V[1].xyz * projection.w;
                 float3 ray = IsPerspectiveProjection() ? foot - GetCameraPositionWS() : GetViewForwardDir();
-                // Intersect the view plane through the foot with the ground to get the requested screen direction.
-                float2 axis = ray.xz * screenAxis.y - screenAxis.xz * ray.y;
                 float orientation = ray.y > 0.0 ? -1.0 : 1.0;
-                float2 direction = axis * (orientation * rsqrt(max(dot(axis, axis), 1e-12)));
-                // Rotate the width with the footprint so a horizontal heading still has area.
-                float2 right = float2(direction.y, -direction.x) * orientation;
+                float3 screenRight = UNITY_MATRIX_V[0].xyz;
+                float3 screenDirection = screenRight * projection.z + UNITY_MATRIX_V[1].xyz * projection.w;
+                // Keep the foot row screen-horizontal so both sides stay aligned with the sprite.
+                float2 right = ProjectGroundAxis(ray, screenRight, orientation);
+                float2 direction = ProjectGroundAxis(ray, screenDirection, orientation);
 
                 float3 localX = TransformObjectToWorldDir(float3(1, 0, 0), false);
                 float3 localY = TransformObjectToWorldDir(float3(0, 1, 0), false);
