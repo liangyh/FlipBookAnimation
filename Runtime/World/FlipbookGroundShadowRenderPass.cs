@@ -77,28 +77,6 @@ namespace KingdomTD.Flipbook
             }
         }
 
-#if URP_COMPATIBILITY_MODE
-#pragma warning disable CS0618, CS0672 // Render Graph Compatibility Mode only calls the obsolete Execute path.
-        public override void Execute(ScriptableRenderContext context, ref RenderingData renderingData)
-        {
-            if (_yieldToFeature && FlipbookGroundShadowRendering.IsClaimedByFeature(renderingData.cameraData.renderer))
-            {
-                return;
-            }
-
-            WarnIfDepthHasNoStencil(renderingData.cameraData.cameraTargetDescriptor.depthStencilFormat,
-                renderingData.cameraData.camera);
-            DrawingSettings drawing = RenderingUtils.CreateDrawingSettings(ShaderTag, ref renderingData,
-                SortingCriteria.OptimizeStateChanges);
-            RendererListParams list = new RendererListParams(renderingData.cullResults, drawing, _filtering);
-            CommandBuffer cmd = CommandBufferPool.Get(PassName);
-            cmd.DrawRendererList(context.CreateRendererList(ref list));
-            context.ExecuteCommandBuffer(cmd);
-            CommandBufferPool.Release(cmd);
-        }
-#pragma warning restore CS0618, CS0672
-#endif
-
         /// <summary>
         /// 深度附件没有模板位时 GPU 跳过模板测试，重叠的半透明影子会再次变深。每台相机只提示一次。
         /// </summary>

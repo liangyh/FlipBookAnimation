@@ -101,7 +101,7 @@ renderer.SetTimeMode(FlipbookTimeMode.Scaled);
 
 ### 地面阴影
 
-在角色预制体的 `FlipbookRenderer` 上勾选 **Ground Shadow Enabled**。影子在不透明物体之后单独绘制一轮，不需要额外配置：只要有角色开着阴影，包就会给每个相机的 URP Renderer 自动加入影子 Pass；最后一个角色关闭阴影、禁用或销毁后，就不再提交。需要自定义时，可在 URP Renderer 资产中点击 **Add Renderer Feature → Flipbook Ground Shadow Renderer Feature**。**Layer Mask** 可以只为部分层绘制影子；**Render Pass Event** 只能在 `AfterRenderingOpaques` 到 `BeforeRenderingTransparents` 之间，超出范围会被夹回。添加了 Feature 的 Renderer 从第一次渲染起就使用 Feature 的设置，默认 Pass 会让位。支持 Render Graph，也支持 Render Graph 兼容模式（`URP_COMPATIBILITY_MODE`）。内置 World 材质会将当前帧的主纹理 Alpha 按材质的 **Alpha Cutoff** 裁成轮廓，动作、朝向和水平镜像都随角色变化。适用于连续的水平地面。角色离地时影子留在设定的世界高度，地面前方的不透明物体通过深度测试遮挡影子。
+在角色预制体的 `FlipbookRenderer` 上勾选 **Ground Shadow Enabled**。影子在不透明物体之后单独绘制一轮，不需要额外配置：只要有角色开着阴影，包就会给每个相机的 URP Renderer 自动加入影子 Pass；最后一个角色关闭阴影、禁用或销毁后，就不再提交。需要自定义时，可在 URP Renderer 资产中点击 **Add Renderer Feature → Flipbook Ground Shadow Renderer Feature**。**Layer Mask** 可以只为部分层绘制影子；**Render Pass Event** 只能在 `AfterRenderingOpaques` 到 `BeforeRenderingTransparents` 之间，超出范围会被夹回。添加了 Feature 的 Renderer 从第一次渲染起就使用 Feature 的设置，默认 Pass 会让位。影子 Pass 只实现了 Render Graph 路径，开启 Render Graph 兼容模式（`URP_COMPATIBILITY_MODE`）时不绘制影子。内置 World 材质会将当前帧的主纹理 Alpha 按材质的 **Alpha Cutoff** 裁成轮廓，动作、朝向和水平镜像都随角色变化。适用于连续的水平地面。角色离地时影子留在设定的世界高度，地面前方的不透明物体通过深度测试遮挡影子。
 
 **Ground Shadow Foot Height** 是脚底距离帧底的比例，默认值为 0。例如 200 像素高的帧在脚下留了 14 像素透明边，可填 `0.07`。在正交或透视的俯视镜头中调整脚底位置最直观。
 
