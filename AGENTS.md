@@ -9,6 +9,7 @@ This repository is a Unity Package Manager (UPM) package: `com.kingdomtd.flipboo
 - `Runtime/Shaders/` holds the shared world shader.
 - `Editor/` contains inspectors, asset-creation menus, drag-and-drop support, and package icons.
 - `Documentation~/README.md` documents package behavior and public usage. Keep it aligned with API changes.
+- When a release changes user-facing features, defaults, setup, or samples, update the affected sections and revision history in `Documentation~/功能说明书.md`. Regenerate `Documentation~/KingdomTD-Flipbook-Manual.pdf` from that source after those edits and after a package version bump. Follow the export instructions in `Documentation~/README.md`.
 
 Runtime code must not reference `UnityEditor`. Put editor-only code in `Editor/` so the asmdefs remain platform-safe. Commit Unity `.meta` files with every added, moved, or deleted Unity asset.
 

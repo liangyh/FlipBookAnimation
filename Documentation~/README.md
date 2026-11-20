@@ -2,7 +2,7 @@
 
 `KingdomTD Flipbook` 是一个独立 UPM Package。它用同一份网格纹理和动作数据驱动场景 Quad 与 UGUI，项目业务代码不需要关心 UV、帧推进和帧事件。
 
-项目级详细交付文档见 `UnityProject/CCMd/KingdomTDFlipbook使用手册.md`，包含资源规范、完整 API、业务接入、性能建议、故障排查和验收清单。
+从示例上手、查阅组件参数或核对版本迁移步骤时，可阅读[中文功能说明书](功能说明书.md)或下载[可打印的 PDF](KingdomTD-Flipbook-Manual.pdf)。
 
 ## 资产
 
@@ -156,3 +156,19 @@ Package 不依赖 Addressables、Resources 或项目业务程序集，也不提�
 ## 示例
 
 通过 Package Manager 导入 **Flipbook Basic** 示例。打开其场景即可同时验证 `FlipbookRenderer` 与 `FlipbookGraphic`；两种组件共享同一动画资源，World 渲染额外使用样例材质。
+
+## 随版本维护功能说明书
+
+以[中文 Markdown 源稿](功能说明书.md)编辑正文。功能、默认值、安装步骤或示例发生变化时，修改对应章节，并在“版本记录”补上版本、日期和对使用者的影响。导出器从包根目录的 `package.json` 读取当前版本、依赖版本和 Git 地址，并按实际排版生成目录页码。
+
+在已激活的 Python 3.9 或以上版本的虚拟环境中，从仓库根目录执行以下命令。导出需要 Chrome 或 Chromium 131 或以上，以及支持简体中文的系统字体。Linux 可安装 `fonts-noto-cjk`，浏览器在非标准位置时可用 `CHROME_BIN` 指定可执行文件。
+
+```sh
+python -m pip install -r 'Documentation~/requirements.txt'
+python 'Documentation~/export_manual.py'
+python 'Documentation~/export_manual.py' --check
+```
+
+导出会更新[同一份 PDF](KingdomTD-Flipbook-Manual.pdf)。将源稿和 PDF 随版本一起提交。`--check` 可单独运行，核对 PDF 是否对应当前源稿、配图、排版、导出器和包清单。
+
+仓库中的 **Flipbook manual** 工作流会在相关文档或包清单的 PR、推送到 main，以及推送 `v*` 标签时重新导出 PDF，保存为带包版本号的 Actions 构建产物。它也会检查仓库里可下载的 PDF 是否已更新。已提交的各版说明书可随对应的 Git 标签查阅。

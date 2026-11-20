@@ -2,6 +2,8 @@
 
 `KingdomTD Flipbook` 是一个 Unity UPM 包，用同一张序列帧网格纹理驱动场景中的 Quad 和 UGUI 动画。它负责 UV 切换、播放控制、帧事件与完成事件，适用于角色特效、UI 动效和轻量级序列帧表现。
 
+[下载中文功能说明书（PDF）](Documentation~/KingdomTD-Flipbook-Manual.pdf) · [在线阅读与编辑源稿](Documentation~/功能说明书.md)
+
 ## 环境要求
 
 - Unity `6000.0` 或更高版本
