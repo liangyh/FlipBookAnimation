@@ -79,6 +79,15 @@
     color: rgb(234, 237, 240);
 }
 
+.toggles .opacity {
+    width: 260px;
+    margin-left: 12px;
+}
+
+.toggles .opacity .unity-base-field__input {
+    min-width: 0;
+}
+
 .toggles .unity-button {
     margin-left: 10px;
 }

@@ -22,7 +22,8 @@ namespace KingdomTD.Flipbook
         internal static Func<Scene, bool> IsPreviewScene { get; set; }
 #endif
 
-        [ColorUsage(false)] [SerializeField] private Color _shadowColor = DefaultColor;
+        [Tooltip("RGB 为影子颜色，Alpha 为不透明度。多个影子重叠处不会加深。")]
+        [ColorUsage(true)] [SerializeField] private Color _shadowColor = DefaultColor;
         [Tooltip("屏幕空间角度，0° 向右，90° 向上。")]
         [Range(0f, 360f)] [SerializeField] private float _screenAngle = DefaultAngle;
         [Tooltip("图中一个角色高度对应的地面投影长度。")]

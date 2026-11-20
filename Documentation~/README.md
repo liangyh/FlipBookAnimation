@@ -99,13 +99,15 @@ renderer.SetTimeMode(FlipbookTimeMode.Scaled);
 `forceRestart` 默认为 `true`，保持每次调用 `Play` 都重新播放的兼容行为；传入 `false` 时，若同一动画仍在播放，则保留当前进度，仅更新循环状态和速度并解除暂停。动画已经停止、播放完成或发生切换时仍会重新播放。
 组件 Inspector 的 `Animation` 下拉框会列出资产中的全部动画；编辑态切换时保存默认动画并显示首帧。Play Mode 下拉框只更新当前播放状态，不修改序列化配置或触发资源重建；打开和关闭 Unity 原生下拉菜单时产生的 EditorLoop 停顿不属于运行时开销。
 
-### 纯色地面阴影
+### 地面阴影
 
-在角色预制体的 `FlipbookRenderer` 上勾选 **Ground Shadow Enabled**。内置 World 材质会将当前帧的主纹理 Alpha 按材质的 **Alpha Cutoff** 裁成不透明轮廓，动作、朝向和水平镜像都随角色变化。适用于连续的水平地面。角色离地时影子留在设定的世界高度，地面前方的不透明物体通过深度测试遮挡影子。
+在角色预制体的 `FlipbookRenderer` 上勾选 **Ground Shadow Enabled**。影子在不透明物体之后单独绘制一轮，不需要额外配置：只要有角色开着阴影，包就会给每个相机的 URP Renderer 自动加入影子 Pass；最后一个角色关闭阴影、禁用或销毁后，就不再提交。需要自定义时，可在 URP Renderer 资产中点击 **Add Renderer Feature → Flipbook Ground Shadow Renderer Feature**。**Layer Mask** 可以只为部分层绘制影子；**Render Pass Event** 只能在 `AfterRenderingOpaques` 到 `BeforeRenderingTransparents` 之间，超出范围会被夹回。添加了 Feature 的 Renderer 从第一次渲染起就使用 Feature 的设置，默认 Pass 会让位。支持 Render Graph，也支持 Render Graph 兼容模式（`URP_COMPATIBILITY_MODE`）。内置 World 材质会将当前帧的主纹理 Alpha 按材质的 **Alpha Cutoff** 裁成轮廓，动作、朝向和水平镜像都随角色变化。适用于连续的水平地面。角色离地时影子留在设定的世界高度，地面前方的不透明物体通过深度测试遮挡影子。
 
 **Ground Shadow Foot Height** 是脚底距离帧底的比例，默认值为 0。例如 200 像素高的帧在脚下留了 14 像素透明边，可填 `0.07`。在正交或透视的俯视镜头中调整脚底位置最直观。
 
 场景可添加一个 **KingdomTD > Flipbook Ground Shadow Settings** 统一调整投影。缺省使用不透明深灰色、屏幕角度 45°、长度 0.7、世界地面高度 0。角度从屏幕右方向上逆时针计算，长度表示一整帧的角色高度对应多少地面距离。阴影脚底一行沿屏幕横向与角色对齐。0° 和 180° 时投影沿这条线展开，轮廓面积为零。普通场景共用最后启用的设置，禁用后恢复上一份或缺省设置。Prefab Mode 的预览使用所在 Prefab Stage 的设置，缺省时使用默认值。
+
+**Shadow Color** 的 RGB 是影子颜色，Alpha 是不透明度，缺省值为 1（实心）。半透明影子与地面做 Alpha 混合。混合时会占用模板缓冲的一个位：同一像素第一次画上影子后就会置位，之后的影子不再画到这个像素，所以多个影子交叠时仍是一层的深浅。这个位由材质的 **Ground Shadow Stencil Bit** 指定，默认 `2`。URP 把模板的低 4 位留给用户，但其中的 `4` 和 `8` 会被模板方式的 LOD 交叉淡化占用，所以可选的是 `1` 或 `2`。如果项目里其他效果也用到这一位，改用另一个空闲的位。去重依赖深度附件上的模板位：相机直接输出到 RenderTexture 时，深度格式必须带 S8，例如 `D24_UNorm_S8_UInt` 或 `D32_SFloat_S8_UInt`。用 `D32_SFloat` 这类不带模板的格式时，重叠的半透明影子会再次变深，每台相机会在 Console 中提示一次。同一相机栈中，不清除深度的 Overlay 相机会沿用 Base 相机的模板位：两台相机的影子交叠时仍只算一层，与单个相机内的行为一致。Alpha 为 0 时不绘制影子。
 
 ```csharp
 renderer.GroundShadowFootHeight = 0.07f;
@@ -113,12 +115,12 @@ renderer.GroundShadowEnabled = true;
 shadowSettings.ScreenAngle = 120f;
 shadowSettings.Length = 0.85f;
 shadowSettings.GroundHeight = 2f;
-shadowSettings.ShadowColor = new Color(0.18f, 0.17f, 0.2f);
+shadowSettings.ShadowColor = new Color(0.18f, 0.17f, 0.2f, 0.5f); // Alpha 0.5：半透明
 ```
 
-使用阴影的角色共享一个八顶点网格，角色与影子在同一子网格、同一材质、同一 Pass 中绘制。关闭时使用四顶点网格。内置 World Shader 保留每个对象的变换矩阵，可在共享材质上启用 **Enable GPU Instancing** 合并同类角色的绘制。切换阴影沿用当前材质，使用不支持阴影的旧材质时显示原四顶点角色。
+使用阴影的角色共享一个八顶点网格，角色与影子在同一子网格、同一材质中绘制。关闭时使用四顶点网格。World Shader 分为两个 Pass：`Flipbook`（LightMode `UniversalForward`）只画不透明的角色，由 URP 的不透明绘制提交；`FlipbookGroundShadow`（LightMode `FlipbookGroundShadow`）只画混合的影子，由影子 Pass 集中提交。两个 Pass 各自把另一半顶点收成零面积。因为角色和影子分两次绘制，不会交替提交，所以在共享材质上启用 **Enable GPU Instancing** 后，所有角色本体合成一批，所有影子再合成一批。内置 World Shader 保留每个对象的变换矩阵。切换阴影沿用当前材质，使用不支持阴影的旧材质时显示原四顶点角色。
 
-阴影每个片元只采一次原图集，透明留白与近景大面积重叠仍有像素成本。测量时使用相同分辨率、镜头、动作与角色布局，对照开关前后的 GPU 帧耗时，并用 Frame Debugger 检查同材质实例的批次。
+阴影每个片元只采一次原图集，透明留白与近景大面积重叠仍有像素成本。影子单独成批，绘制次数约为只画角色时的两倍，而不是按角色数增加。没有开阴影、但使用同一材质的角色也会进入影子批次，只提交零面积的三角形，没有片元开销。测量时使用相同分辨率、镜头、动作与角色布局，对照开关前后的 GPU 帧耗时，并用 Frame Debugger 检查同材质实例的批次。
 
 ## UGUI 渲染
 

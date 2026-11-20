@@ -456,6 +456,10 @@ namespace KingdomTD.Flipbook
 
             if (withShadow)
             {
+                if (!_usingGroundShadow)
+                {
+                    FlipbookGroundShadowRendering.AddUser();
+                }
                 _usingGroundShadow = true;
                 UpdateGroundShadow(true);
             }
@@ -463,6 +467,10 @@ namespace KingdomTD.Flipbook
 
         private void ReleaseGroundShadow()
         {
+            if (_usingGroundShadow)
+            {
+                FlipbookGroundShadowRendering.RemoveUser();
+            }
             _usingGroundShadow = false;
             if (_meshFilter != null)
             {

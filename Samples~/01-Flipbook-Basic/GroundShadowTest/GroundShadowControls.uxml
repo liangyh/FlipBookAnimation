@@ -15,6 +15,7 @@
             </ui:VisualElement>
             <ui:VisualElement class="row toggles">
                 <ui:Toggle name="shadows" label="Ground shadows" value="true" />
+                <ui:Slider name="opacity" label="Shadow Opacity" low-value="0" high-value="1" value="0.5" show-input-field="true" class="opacity" />
                 <ui:Button name="pause" text="Pause" />
             </ui:VisualElement>
         </ui:VisualElement>

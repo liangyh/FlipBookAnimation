@@ -13,6 +13,7 @@ namespace KingdomTD.Flipbook.Samples
 
         [Min(1)] [SerializeField] private int _characterCount = 1;
         [SerializeField] private bool _showGroundShadows = true;
+        [Range(0f, 1f)] [SerializeField] private float _shadowOpacity = 0.5f;
         [SerializeField] private FlipbookRenderer _character;
         [SerializeField] private Camera _viewCamera;
         [SerializeField] private Transform _ground;
@@ -24,6 +25,8 @@ namespace KingdomTD.Flipbook.Samples
         private VisualElement _panel;
         private IntegerField _countField;
         private Toggle _shadowToggle;
+        private Slider _opacitySlider;
+        private float _appliedOpacity = -1f;
         private Button _pauseButton;
         private Label _frameRate;
         private Label _renderStats;
@@ -54,6 +57,7 @@ namespace KingdomTD.Flipbook.Samples
             GetComponent<UIDocument>().rootVisualElement.Add(_panel);
             _countField = _panel.Q<IntegerField>("count");
             _shadowToggle = _panel.Q<Toggle>("shadows");
+            _opacitySlider = _panel.Q<Slider>("opacity");
             _pauseButton = _panel.Q<Button>("pause");
             _frameRate = _panel.Q<Label>("frame-rate");
             _renderStats = _panel.Q<Label>("render-stats");
@@ -62,6 +66,7 @@ namespace KingdomTD.Flipbook.Samples
             _panel.Q<Button>("stress-1000").clicked += () => SetCount(1000);
             _panel.Q<Button>("stress-2000").clicked += () => SetCount(2000);
             _shadowToggle.RegisterValueChangedCallback(change => SetShadows(change.newValue));
+            _opacitySlider.RegisterValueChangedCallback(change => SetShadowOpacity(change.newValue));
             _pauseButton.clicked += () => SetPaused(!_paused);
 
             if (_characters.Count == 0)
@@ -72,6 +77,7 @@ namespace KingdomTD.Flipbook.Samples
             _drawCalls = ProfilerRecorder.StartNew(ProfilerCategory.Render, "Draw Calls Count");
             _captureTimings = FrameTimingManager.IsFeatureEnabled();
             SetShadows(_showGroundShadows);
+            SetShadowOpacity(_shadowOpacity);
             SetCount(_characterCount);
         }
 
@@ -101,6 +107,12 @@ namespace KingdomTD.Flipbook.Samples
             if (_showGroundShadows != _shadowsApplied)
             {
                 SetShadows(_showGroundShadows);
+            }
+
+            // Only follow Inspector edits of the opacity, so the settings' own alpha stays editable.
+            if (_shadowOpacity != _appliedOpacity)
+            {
+                SetShadowOpacity(_shadowOpacity);
             }
 
             UpdateMeasurement();
@@ -146,6 +158,16 @@ namespace KingdomTD.Flipbook.Samples
                 actor.GroundShadowEnabled = show;
             }
             RestartMeasurement();
+        }
+
+        private void SetShadowOpacity(float opacity)
+        {
+            _shadowOpacity = Mathf.Clamp01(opacity);
+            _appliedOpacity = _shadowOpacity;
+            _opacitySlider.SetValueWithoutNotify(_shadowOpacity);
+            Color color = _shadowSettings.ShadowColor;
+            color.a = _shadowOpacity;
+            _shadowSettings.ShadowColor = color;
         }
 
         private void SetPaused(bool paused)

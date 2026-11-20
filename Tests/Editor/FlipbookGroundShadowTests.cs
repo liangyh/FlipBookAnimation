@@ -4,6 +4,7 @@ using UnityEditor;
 using UnityEditor.SceneManagement;
 using UnityEngine;
 using UnityEngine.Rendering;
+using UnityEngine.Rendering.Universal;
 using UnityEngine.SceneManagement;
 using UnityEngine.TestTools;
 
@@ -444,6 +445,237 @@ namespace KingdomTD.Flipbook.Tests
                 Object.DestroyImmediate(pixels);
                 Object.DestroyImmediate(scenery);
             }
+        }
+
+        [Test]
+        public void WorldShader_DrawsCharacterAndGroundShadowInSeparatePasses()
+        {
+            Assert.AreEqual(2, _material.passCount);
+            Assert.AreEqual(0, _material.FindPass("Flipbook"));
+            Assert.AreEqual(1, _material.FindPass("FlipbookGroundShadow"));
+            Assert.AreEqual(new ShaderTagId(FlipbookGroundShadowRenderPass.LightModeTag),
+                _material.shader.FindPassTagValue(1, new ShaderTagId("LightMode")));
+            Assert.IsTrue(_material.HasProperty("_FlipbookGroundStencil"));
+        }
+
+        [Test]
+        public void GroundShadowUsers_UnsubscribeWhenLastShadowStops()
+        {
+            int baseline = FlipbookGroundShadowRendering.UserCount;
+            _renderer.GroundShadowEnabled = true;
+            FlipbookRenderer other = CreateObject("Other character").AddComponent<FlipbookRenderer>();
+            other.SetAsset(_asset);
+            other.GroundShadowEnabled = true;
+            Assert.AreEqual(baseline + 2, FlipbookGroundShadowRendering.UserCount);
+
+            // Reset re-synchronizes the shadow mesh while the shadow is already in use.
+            _renderer.SendMessage("Reset");
+            Assert.AreEqual(baseline + 2, FlipbookGroundShadowRendering.UserCount, "Refreshing must not count twice.");
+
+            _renderer.GroundShadowEnabled = false;
+            other.enabled = false;
+            Assert.AreEqual(baseline, FlipbookGroundShadowRendering.UserCount);
+
+            other.enabled = true;
+            Assert.AreEqual(baseline + 1, FlipbookGroundShadowRendering.UserCount);
+            Object.DestroyImmediate(other.gameObject);
+            Assert.AreEqual(baseline, FlipbookGroundShadowRendering.UserCount);
+        }
+
+        [TestCase(RenderPassEvent.BeforeRenderingOpaques, RenderPassEvent.AfterRenderingOpaques)]
+        [TestCase(RenderPassEvent.AfterRenderingSkybox, RenderPassEvent.AfterRenderingSkybox)]
+        [TestCase(RenderPassEvent.AfterRenderingTransparents, RenderPassEvent.BeforeRenderingTransparents)]
+        public void GroundShadowRenderPass_ClampsEventBetweenOpaquesAndTransparents(RenderPassEvent requested,
+            RenderPassEvent expected)
+        {
+            Assert.AreEqual(expected, new FlipbookGroundShadowRenderPass(requested).renderPassEvent);
+        }
+
+        [TestCase(0f)]
+        [TestCase(0.5f)]
+        [TestCase(1f)]
+        public void Render_ShadowOpacity_BlendsShadowColorWithGround(float opacity)
+        {
+            RenderGroundView((camera, pixels, scenery) =>
+            {
+                PlaceShadowCaster(_renderer, camera, new Vector3(-2f, 3.4f, 0f));
+                SetShadowOpacity(opacity, _renderer);
+                Vector2Int point = ShadowPoint(camera, _renderer, -1f);
+                ReadCameraPixels(camera, pixels);
+                Color color = pixels.GetPixel(point.x, point.y);
+                bool expected = opacity == 0f ? IsGround(color) : opacity == 1f ? IsShadow(color) : IsHalfShadow(color);
+                Assert.IsTrue(expected, $"Opacity {opacity} at {point} = {color}");
+            });
+        }
+
+        [Test]
+        public void Render_OverlappingTranslucentShadows_MatchSingleLayer()
+        {
+            RenderGroundView((camera, pixels, scenery) =>
+            {
+                PlaceShadowCaster(_renderer, camera, new Vector3(-2f, 3.4f, 0f));
+                FlipbookRenderer other = CreateObject("Other character").AddComponent<FlipbookRenderer>();
+                other.SetAsset(_asset);
+                other.Play("Idle", false);
+                PlaceShadowCaster(other, camera, new Vector3(-1.7f, 3.4f, 0.2f));
+
+                other.TargetRenderer.enabled = false;
+                Color[] firstSilhouette = ReadAllPixels(camera, pixels);
+                _renderer.TargetRenderer.enabled = false;
+                other.TargetRenderer.enabled = true;
+                Color[] secondSilhouette = ReadAllPixels(camera, pixels);
+
+                SetShadowOpacity(0.5f, _renderer, other);
+                _renderer.TargetRenderer.enabled = true;
+                other.TargetRenderer.enabled = false;
+                Color[] singleLayer = ReadAllPixels(camera, pixels);
+                other.TargetRenderer.enabled = true;
+                Color[] overlapped = ReadAllPixels(camera, pixels);
+
+                int overlap = 0;
+                for (int i = 0; i < overlapped.Length; i++)
+                {
+                    if (!IsShadow(firstSilhouette[i]) || !IsShadow(secondSilhouette[i]))
+                    {
+                        continue;
+                    }
+
+                    overlap++;
+                    string pixel = $"({i % pixels.width}, {i / pixels.width})";
+                    Assert.IsTrue(IsHalfShadow(singleLayer[i]), $"Pixel {pixel} = {singleLayer[i]}");
+                    Assert.Less(Vector4.Distance(singleLayer[i], overlapped[i]), 0.02f,
+                        $"Pixel {pixel} darkened where the shadows overlap: {singleLayer[i]} -> {overlapped[i]}");
+                }
+
+                Assert.GreaterOrEqual(overlap, 64, "The two silhouettes must overlap.");
+            });
+        }
+
+        [Test]
+        public void Render_TranslucentShadow_FollowsFramesMirrorAndOcclusion()
+        {
+            RenderGroundView((camera, pixels, scenery) =>
+            {
+                PlaceShadowCaster(_renderer, camera, new Vector3(-2f, 3.4f, 0f));
+                SetShadowOpacity(0.5f, _renderer);
+                Vector2Int left = ShadowPoint(camera, _renderer, -1f);
+                Vector2Int right = ShadowPoint(camera, _renderer, 1f);
+                Vector3 body = camera.WorldToScreenPoint(_renderer.transform.TransformPoint(new Vector3(-0.25f, 0.2f, 0f)));
+
+                AssertHalfShadow(camera, pixels, left, right, true, false);
+                Color bodyColor = pixels.GetPixel((int)body.x, (int)body.y);
+                Assert.Less(Vector4.Distance(Color.white, bodyColor), 0.02f, $"The body became translucent: {bodyColor}");
+
+                _renderer.SetNormalizedTime(1f);
+                AssertHalfShadow(camera, pixels, left, right, false, true);
+                _renderer.SetDirection(1);
+                AssertHalfShadow(camera, pixels, left, right, true, false);
+
+                Ray ray = camera.ScreenPointToRay(new Vector3(left.x + 0.5f, left.y + 0.5f, 0f));
+                Assert.IsTrue(new Plane(Vector3.up, Vector3.up * _settings.GroundHeight).Raycast(ray, out float distance));
+                GameObject obstacle = CreateScenery(PrimitiveType.Cube, scenery);
+                obstacle.transform.position = ray.GetPoint(distance - 0.4f);
+                obstacle.transform.localScale = Vector3.one * 0.23f;
+                AssertHalfShadow(camera, pixels, left, right, false, false);
+            });
+        }
+
+        private void RenderGroundView(System.Action<Camera, Texture2D, Material> body)
+        {
+            if (SystemInfo.graphicsDeviceType == GraphicsDeviceType.Null || GraphicsSettings.currentRenderPipeline == null)
+            {
+                Assert.Ignore("This render test requires a URP graphics device.");
+            }
+
+            Camera camera = CreateObject("Test camera").AddComponent<Camera>();
+            camera.scene = _scene;
+            camera.enabled = false;
+            camera.clearFlags = CameraClearFlags.SolidColor;
+            camera.backgroundColor = Color.black;
+            camera.orthographic = true;
+            camera.orthographicSize = 3.5f;
+            camera.transform.position = new Vector3(0f, 5.5f, -8f);
+            camera.transform.LookAt(Vector3.up);
+
+            RenderTexture target = RenderTexture.GetTemporary(384, 320, 24, RenderTextureFormat.ARGB32);
+            Texture2D pixels = new Texture2D(target.width, target.height);
+            Material scenery = new Material(Shader.Find("Universal Render Pipeline/Unlit")) { color = Color.cyan };
+            RenderTexture previous = RenderTexture.active;
+            try
+            {
+                camera.targetTexture = target;
+                GameObject floor = CreateScenery(PrimitiveType.Plane, scenery);
+                floor.transform.position = Vector3.up * _settings.GroundHeight;
+                floor.transform.localScale = Vector3.one * 4f;
+                body(camera, pixels, scenery);
+            }
+            finally
+            {
+                camera.targetTexture = null;
+                RenderTexture.active = previous;
+                RenderTexture.ReleaseTemporary(target);
+                Object.DestroyImmediate(pixels);
+                Object.DestroyImmediate(scenery);
+            }
+        }
+
+        private static void PlaceShadowCaster(FlipbookRenderer renderer, Camera camera, Vector3 position)
+        {
+            renderer.transform.SetPositionAndRotation(position, camera.transform.rotation);
+            renderer.transform.localScale = new Vector3(1.8f, 2f, 1f);
+            renderer.GroundShadowFootHeight = 0.1f;
+            renderer.GroundShadowEnabled = true;
+            renderer.SetDirection(0);
+        }
+
+        private void SetShadowOpacity(float opacity, params FlipbookRenderer[] renderers)
+        {
+            Color color = _settings.ShadowColor;
+            color.a = opacity;
+            _settings.ShadowColor = color;
+            foreach (FlipbookRenderer renderer in renderers)
+            {
+                renderer.SendMessage("LateUpdate");
+            }
+        }
+
+        private Vector2Int ShadowPoint(Camera camera, FlipbookRenderer renderer, float side)
+        {
+            Vector3 foot = renderer.transform.TransformPoint(new Vector3(0f, -0.4f, 0f));
+            foot.y = _settings.GroundHeight + 0.001f;
+            float angle = _settings.ScreenAngle * Mathf.Deg2Rad;
+            Vector3 direction = GroundDirection(camera, foot, new Vector2(Mathf.Cos(angle), Mathf.Sin(angle)));
+            Vector3 quarterWidth = GroundDirection(camera, foot, Vector2.right) * (1.8f * 0.25f);
+            Vector3 point = camera.WorldToScreenPoint(foot + direction * (2f * 0.55f * _settings.Length) +
+                                                      quarterWidth * side);
+            return new Vector2Int((int)point.x, (int)point.y);
+        }
+
+        private static void AssertHalfShadow(Camera camera, Texture2D pixels, Vector2Int left, Vector2Int right,
+            bool expectedLeft, bool expectedRight)
+        {
+            ReadCameraPixels(camera, pixels);
+            Color leftColor = pixels.GetPixel(left.x, left.y);
+            Color rightColor = pixels.GetPixel(right.x, right.y);
+            Assert.IsTrue(expectedLeft ? IsHalfShadow(leftColor) : IsGround(leftColor), $"Left {left} = {leftColor}");
+            Assert.IsTrue(expectedRight ? IsHalfShadow(rightColor) : IsGround(rightColor), $"Right {right} = {rightColor}");
+        }
+
+        private static Color[] ReadAllPixels(Camera camera, Texture2D pixels)
+        {
+            ReadCameraPixels(camera, pixels);
+            return pixels.GetPixels();
+        }
+
+        private static bool IsGround(Color pixel)
+        {
+            return pixel.r < 0.1f && pixel.g > 0.9f && pixel.b > 0.9f;
+        }
+
+        // Half magenta over cyan, in either gamma or linear color space.
+        private static bool IsHalfShadow(Color pixel)
+        {
+            return pixel.r > 0.3f && pixel.r < 0.85f && Mathf.Abs(pixel.r - pixel.g) < 0.05f && pixel.b > 0.9f;
         }
 
         private GameObject CreateScenery(PrimitiveType type, Material material)

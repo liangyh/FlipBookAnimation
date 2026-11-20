@@ -78,7 +78,7 @@ flipbook.Play("Walk", forceRestart: false);
 
 使用 `Pause()`、`Resume()`、`Stop()` 控制播放；`SetTimeMode(FlipbookTimeMode.Unscaled)` 可改用非缩放时间。`SetEffectChangeRate()` 可混合资源材质中的可选 **Effect Texture**。
 
-在角色预制体的 **Flipbook Renderer** 上勾选 **Ground Shadow Enabled**，当前帧的轮廓就会以不透明纯色投到水平地面。默认地面为世界 `Y = 0`，影子朝屏幕右上方。给场景对象添加 **KingdomTD > Flipbook Ground Shadow Settings** 可统一调整颜色、方向、长度和地面高度。
+在角色预制体的 **Flipbook Renderer** 上勾选 **Ground Shadow Enabled**，当前帧的轮廓就会以可调浓淡的纯色投到水平地面。默认地面为世界 `Y = 0`，影子朝屏幕右上方。给场景对象添加 **KingdomTD > Flipbook Ground Shadow Settings** 可统一调整颜色、浓淡（Alpha）、方向、长度和地面高度。
 
 ## 在 UGUI 中使用
 
