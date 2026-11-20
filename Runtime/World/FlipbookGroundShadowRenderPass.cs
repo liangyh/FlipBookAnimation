@@ -21,25 +21,12 @@ namespace KingdomTD.Flipbook
         private static readonly ShaderTagId ShaderTag = new ShaderTagId(LightModeTag);
         private static readonly HashSet<int> CamerasWarnedWithoutStencil = new HashSet<int>();
 
-        private readonly bool _yieldToFeature;
         private FilteringSettings _filtering = new FilteringSettings(RenderQueueRange.opaque);
 
         public FlipbookGroundShadowRenderPass(RenderPassEvent passEvent = EarliestEvent)
-            : this(passEvent, false)
-        {
-        }
-
-        /// <param name="yieldToFeature">自动注入的默认 Pass 为 true：本次渲染的 Renderer 由 Feature 接管时不绘制。</param>
-        internal FlipbookGroundShadowRenderPass(bool yieldToFeature)
-            : this(EarliestEvent, yieldToFeature)
-        {
-        }
-
-        private FlipbookGroundShadowRenderPass(RenderPassEvent passEvent, bool yieldToFeature)
         {
             renderPassEvent = (RenderPassEvent)Mathf.Clamp((int)passEvent, (int)EarliestEvent, (int)LatestEvent);
             profilingSampler = new ProfilingSampler(PassName);
-            _yieldToFeature = yieldToFeature;
         }
 
         public LayerMask LayerMask
@@ -51,11 +38,6 @@ namespace KingdomTD.Flipbook
         public override void RecordRenderGraph(RenderGraph renderGraph, ContextContainer frameData)
         {
             UniversalCameraData camera = frameData.Get<UniversalCameraData>();
-            if (_yieldToFeature && FlipbookGroundShadowRendering.IsClaimedByFeature(camera.renderer))
-            {
-                return;
-            }
-
             UniversalResourceData resources = frameData.Get<UniversalResourceData>();
             UniversalRenderingData rendering = frameData.Get<UniversalRenderingData>();
             UniversalLightData light = frameData.Get<UniversalLightData>();

@@ -4,7 +4,9 @@
   "references": [
     "KingdomTD.Flipbook",
     "UnityEngine.UI",
-    "UnityEditor.UI"
+    "UnityEditor.UI",
+    "Unity.RenderPipelines.Core.Runtime",
+    "Unity.RenderPipelines.Universal.Runtime"
   ],
   "includePlatforms": [
     "Editor"

@@ -94,6 +94,15 @@ namespace KingdomTD.Flipbook.Editor
                 {
                     EditorGUILayout.PropertyField(_groundShadowFootHeight);
                 }
+
+                string missing = FlipbookGroundShadowSetup.FindPipelinesMissingFeature();
+                if (missing != null)
+                {
+                    EditorGUILayout.HelpBox(
+                        $"URP 资产 {missing} 的 Renderer 中没有启用的 Flipbook Ground Shadow Renderer Feature，" +
+                        "使用这些资产的画质等级不会绘制地面阴影。请在对应 Renderer 资产中点击 Add Renderer Feature 添加。",
+                        MessageType.Warning);
+                }
             }
             EditorGUILayout.PropertyField(_frameEvent);
             EditorGUILayout.PropertyField(_animationCompleted);

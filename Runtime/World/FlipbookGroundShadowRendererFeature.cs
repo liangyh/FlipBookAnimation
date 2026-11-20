@@ -4,7 +4,7 @@ using UnityEngine.Rendering.Universal;
 namespace KingdomTD.Flipbook
 {
     /// <summary>
-    /// 可选：为某个 URP Renderer 自定义地面阴影的绘制时机和层。没有添加时，地面阴影会自动以默认设置绘制。
+    /// 把 Flipbook 地面阴影加入 URP Renderer。使用地面阴影的项目需要在每个用到的 Renderer 资产中添加一次。
     /// </summary>
     [DisallowMultipleRendererFeature]
     public sealed class FlipbookGroundShadowRendererFeature : ScriptableRendererFeature
@@ -23,7 +23,6 @@ namespace KingdomTD.Flipbook
 
         public override void AddRenderPasses(ScriptableRenderer renderer, ref RenderingData renderingData)
         {
-            FlipbookGroundShadowRendering.ClaimByFeature(renderer);
             renderer.EnqueuePass(_pass);
         }
     }

@@ -19,9 +19,12 @@ namespace KingdomTD.Flipbook.Tests
         private Material _material;
         private Texture2D _atlas;
 
+        private readonly FlipbookGroundShadowRenderPass _groundShadowPass = new FlipbookGroundShadowRenderPass();
+
         [SetUp]
         public void SetUp()
         {
+            RenderPipelineManager.beginCameraRendering += EnqueueGroundShadows;
             _scene = EditorSceneManager.NewPreviewScene();
             _settings = CreateObject("Settings").AddComponent<FlipbookGroundShadowSettings>();
             _settings.ShadowColor = Color.magenta;
@@ -68,6 +71,7 @@ namespace KingdomTD.Flipbook.Tests
         [TearDown]
         public void TearDown()
         {
+            RenderPipelineManager.beginCameraRendering -= EnqueueGroundShadows;
             EditorSceneManager.ClosePreviewScene(_scene);
             Object.DestroyImmediate(_asset);
             Object.DestroyImmediate(_material);
@@ -458,30 +462,6 @@ namespace KingdomTD.Flipbook.Tests
             Assert.IsTrue(_material.HasProperty("_FlipbookGroundStencil"));
         }
 
-        [Test]
-        public void GroundShadowUsers_UnsubscribeWhenLastShadowStops()
-        {
-            int baseline = FlipbookGroundShadowRendering.UserCount;
-            _renderer.GroundShadowEnabled = true;
-            FlipbookRenderer other = CreateObject("Other character").AddComponent<FlipbookRenderer>();
-            other.SetAsset(_asset);
-            other.GroundShadowEnabled = true;
-            Assert.AreEqual(baseline + 2, FlipbookGroundShadowRendering.UserCount);
-
-            // Reset re-synchronizes the shadow mesh while the shadow is already in use.
-            _renderer.SendMessage("Reset");
-            Assert.AreEqual(baseline + 2, FlipbookGroundShadowRendering.UserCount, "Refreshing must not count twice.");
-
-            _renderer.GroundShadowEnabled = false;
-            other.enabled = false;
-            Assert.AreEqual(baseline, FlipbookGroundShadowRendering.UserCount);
-
-            other.enabled = true;
-            Assert.AreEqual(baseline + 1, FlipbookGroundShadowRendering.UserCount);
-            Object.DestroyImmediate(other.gameObject);
-            Assert.AreEqual(baseline, FlipbookGroundShadowRendering.UserCount);
-        }
-
         [TestCase(RenderPassEvent.BeforeRenderingOpaques, RenderPassEvent.AfterRenderingOpaques)]
         [TestCase(RenderPassEvent.AfterRenderingSkybox, RenderPassEvent.AfterRenderingSkybox)]
         [TestCase(RenderPassEvent.AfterRenderingTransparents, RenderPassEvent.BeforeRenderingTransparents)]
@@ -578,6 +558,21 @@ namespace KingdomTD.Flipbook.Tests
                 obstacle.transform.localScale = Vector3.one * 0.23f;
                 AssertHalfShadow(camera, pixels, left, right, false, false);
             });
+        }
+
+        // Render tests do not rely on the host Renderer asset. If it already has the feature,
+        // the duplicate pass draws nothing because the stencil bit rejects every shadow pixel.
+        private void EnqueueGroundShadows(ScriptableRenderContext context, Camera camera)
+        {
+            if (camera.scene != _scene)
+            {
+                return;
+            }
+
+            ScriptableRenderer renderer = camera.TryGetComponent(out UniversalAdditionalCameraData data)
+                ? data.scriptableRenderer
+                : (GraphicsSettings.currentRenderPipeline as UniversalRenderPipelineAsset)?.scriptableRenderer;
+            renderer?.EnqueuePass(_groundShadowPass);
         }
 
         private void RenderGroundView(System.Action<Camera, Texture2D, Material> body)

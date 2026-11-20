@@ -101,7 +101,9 @@ renderer.SetTimeMode(FlipbookTimeMode.Scaled);
 
 ### 地面阴影
 
-在角色预制体的 `FlipbookRenderer` 上勾选 **Ground Shadow Enabled**。影子在不透明物体之后单独绘制一轮，不需要额外配置：只要有角色开着阴影，包就会给每个相机的 URP Renderer 自动加入影子 Pass；最后一个角色关闭阴影、禁用或销毁后，就不再提交。需要自定义时，可在 URP Renderer 资产中点击 **Add Renderer Feature → Flipbook Ground Shadow Renderer Feature**。**Layer Mask** 可以只为部分层绘制影子；**Render Pass Event** 只能在 `AfterRenderingOpaques` 到 `BeforeRenderingTransparents` 之间，超出范围会被夹回。添加了 Feature 的 Renderer 从第一次渲染起就使用 Feature 的设置，默认 Pass 会让位。影子 Pass 只实现了 Render Graph 路径，开启 Render Graph 兼容模式（`URP_COMPATIBILITY_MODE`）时不绘制影子。内置 World 材质会将当前帧的主纹理 Alpha 按材质的 **Alpha Cutoff** 裁成轮廓，动作、朝向和水平镜像都随角色变化。适用于连续的水平地面。角色离地时影子留在设定的世界高度，地面前方的不透明物体通过深度测试遮挡影子。
+先在项目各画质等级用到的 URP Renderer 资产（例如 `PC_Renderer`、`Mobile_Renderer`）中点击 **Add Renderer Feature → Flipbook Ground Shadow Renderer Feature**。影子由这个 Feature 在不透明物体之后单独绘制一轮；没有添加的 Renderer 不画影子，角色照常显示。某个画质等级的 URP 资产里没有任何 Renderer 启用这个 Feature 时，`FlipbookRenderer` 的 Inspector 会列出该资产。**Layer Mask** 可以只为部分层绘制影子；**Render Pass Event** 只能在 `AfterRenderingOpaques` 到 `BeforeRenderingTransparents` 之间，超出范围会被夹回。
+
+然后在角色预制体的 `FlipbookRenderer` 上勾选 **Ground Shadow Enabled**。影子 Pass 只实现了 Render Graph 路径，开启 Render Graph 兼容模式（`URP_COMPATIBILITY_MODE`）时不绘制影子。内置 World 材质会将当前帧的主纹理 Alpha 按材质的 **Alpha Cutoff** 裁成轮廓，动作、朝向和水平镜像都随角色变化。适用于连续的水平地面。角色离地时影子留在设定的世界高度，地面前方的不透明物体通过深度测试遮挡影子。
 
 **Ground Shadow Foot Height** 是脚底距离帧底的比例，默认值为 0。例如 200 像素高的帧在脚下留了 14 像素透明边，可填 `0.07`。在正交或透视的俯视镜头中调整脚底位置最直观。
 
@@ -118,7 +120,7 @@ shadowSettings.GroundHeight = 2f;
 shadowSettings.ShadowColor = new Color(0.18f, 0.17f, 0.2f, 0.5f); // Alpha 0.5：半透明
 ```
 
-使用阴影的角色共享一个八顶点网格，角色与影子在同一子网格、同一材质中绘制。关闭时使用四顶点网格。World Shader 分为两个 Pass：`Flipbook`（LightMode `UniversalForward`）只画不透明的角色，由 URP 的不透明绘制提交；`FlipbookGroundShadow`（LightMode `FlipbookGroundShadow`）只画混合的影子，由影子 Pass 集中提交。两个 Pass 各自把另一半顶点收成零面积。因为角色和影子分两次绘制，不会交替提交，所以在共享材质上启用 **Enable GPU Instancing** 后，所有角色本体合成一批，所有影子再合成一批。内置 World Shader 保留每个对象的变换矩阵。切换阴影沿用当前材质，使用不支持阴影的旧材质时显示原四顶点角色。
+使用阴影的角色共享一个八顶点网格，角色与影子在同一子网格、同一材质中绘制。关闭时使用四顶点网格。World Shader 分为两个 Pass：`Flipbook`（LightMode `UniversalForward`）只画不透明的角色，由 URP 的不透明绘制提交；`FlipbookGroundShadow`（LightMode `FlipbookGroundShadow`）只画混合的影子，由 Renderer Feature 集中提交。两个 Pass 各自把另一半顶点收成零面积。因为角色和影子分两次绘制，不会交替提交，所以在共享材质上启用 **Enable GPU Instancing** 后，所有角色本体合成一批，所有影子再合成一批。内置 World Shader 保留每个对象的变换矩阵。切换阴影沿用当前材质，使用不支持阴影的旧材质时显示原四顶点角色。
 
 阴影每个片元只采一次原图集，透明留白与近景大面积重叠仍有像素成本。影子单独成批，绘制次数约为只画角色时的两倍，而不是按角色数增加。没有开阴影、但使用同一材质的角色也会进入影子批次，只提交零面积的三角形，没有片元开销。测量时使用相同分辨率、镜头、动作与角色布局，对照开关前后的 GPU 帧耗时，并用 Frame Debugger 检查同材质实例的批次。
 
